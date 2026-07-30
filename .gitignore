@@ -1,0 +1,58 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Visual Studio Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# SQL Server temporary and backup files
+*.bak
+*.trn
+*.log
+*.mdf
+*.ndf
+*.ldf
+
+# Power BI temporary files
+*.pbit.tmp
+*.pbix.tmp
+~$*.pbix
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+
+# Azure local configuration
+.local/
+.azure/
+
+# Fabric temporary files
+.fabric/
+
+# Logs and generated output
+logs/
+output/
+temp/
+tmp/
+
+# IDE and tooling cache
+.history/
+.cache/
