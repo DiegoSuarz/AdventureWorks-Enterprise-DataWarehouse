@@ -1,89 +1,202 @@
 # AdventureWorks Enterprise Data Warehouse
 
-> A production-inspired Enterprise Data Warehouse built from scratch using SQL Server 2022, Kimball dimensional modeling principles, and modern data engineering practices.
+<div align="center">
 
-## Project Overview
+> Enterprise Data Warehouse built from scratch using SQL Server and T-SQL, following real-world Data Engineering best practices.
 
-This project designs and implements an Enterprise Data Warehouse using the AdventureWorks2022 transactional database as its source system.
+<br>
 
-The solution transforms operational sales data into a dimensional model optimized for historical analysis, reporting, and business intelligence.
+![SQL Server](https://img.shields.io/badge/SQL_Server-CC2927?style=for-the-badge&logo=microsoftsqlserver&logoColor=white)
+![T-SQL](https://img.shields.io/badge/T--SQL-025E8C?style=for-the-badge)
+![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github)
+![Power BI](https://img.shields.io/badge/Power_BI-Planned-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-## Project Goals
+</div>
 
-* Design a dimensional model following Kimball methodology.
-* Build dimension and fact tables using SQL Server 2022.
-* Implement auditable and reproducible ETL processes.
-* Manage historical changes using Slowly Changing Dimensions.
-* Apply data quality and performance optimization practices.
-* Integrate the solution with Power BI.
-* Orchestrate cloud pipelines using Azure Data Factory.
-* Explore an equivalent analytical implementation in Microsoft Fabric.
-* Document architectural and technical decisions.
+---
 
-## Technology Stack
+# Table of Contents
 
-| Category              | Technology                   |
-| --------------------- | ---------------------------- |
-| Source System         | AdventureWorks2022           |
-| Data Warehouse        | SQL Server 2022              |
-| Query Language        | T-SQL                        |
-| Modeling              | Kimball Dimensional Modeling |
-| Version Control       | Git and GitHub               |
-| Documentation         | Markdown                     |
-| Diagrams              | Draw.io                      |
-| Business Intelligence | Power BI                     |
-| Cloud Orchestration   | Azure Data Factory           |
-| Analytics Platform    | Microsoft Fabric             |
+- [Overview](#overview)
+- [Highlights](#highlights)
+- [Business Problem](#business-problem)
+- [Design Principles](#design-principles)
+- [Solution Architecture](#solution-architecture)
+- [Technology Stack](#technology-stack)
+- [Repository Structure](#repository-structure)
+- [Current Progress](#current-progress)
+- [Current Features](#current-features)
+- [Project Roadmap](#project-roadmap)
+- [License](#license)
 
-## Current Status
+---
 
-* **Version:** `v0.1.0`
-* **Phase:** Foundation
-* **Current branch:** `feature/repository-foundation`
+# Overview
 
-## Planned Architecture
+AdventureWorks Enterprise Data Warehouse is an end-to-end Data Warehouse project built from scratch using SQL Server.
+
+The project demonstrates the design and implementation of a production-oriented analytical platform by applying dimensional modeling, ETL development, auditing, Slowly Changing Dimensions (SCD Type 2), incremental loading, performance optimization and analytical reporting with Power BI.
+
+Rather than serving as a collection of SQL exercises, this repository aims to simulate the development of an enterprise-grade Data Warehouse following professional software engineering practices.
+
+---
+
+# Highlights
+
+- Enterprise-oriented architecture
+- Layered ETL design
+- Modular SQL development
+- Slowly Changing Dimensions (Type 2)
+- Incremental loading strategy
+- ETL auditing
+- Power BI analytics
+- Professional Git workflow
+
+---
+
+# Business Problem
+
+Operational databases are optimized for transactional workloads but are not designed for analytical reporting.
+
+This project transforms transactional data from the AdventureWorks OLTP database into an enterprise-ready analytical model capable of supporting historical analysis, business intelligence and executive reporting.
+
+---
+
+# Design Principles
+
+This project follows engineering practices commonly adopted in enterprise Data Warehouse solutions.
+
+- Layered architecture
+- Separation of concerns
+- Modular SQL scripts
+- Audit-first ETL design
+- Idempotent loading strategy
+- Version-controlled database development
+- Incremental project evolution
+
+---
+
+# Solution Architecture
+
+<p align="center">
+    <img src="docs/diagrams/architecture.png" width="950">
+</p>
+
+---
+
+# Technology Stack
+
+| Category | Technology |
+|-----------|------------|
+| Database | SQL Server |
+| Language | T-SQL |
+| Version Control | Git |
+| Repository | GitHub |
+| IDE | Visual Studio Code |
+| Business Intelligence | Power BI *(planned)* |
+
+---
+
+# Repository Structure
 
 ```text
-AdventureWorks2022
-        |
-        v
-   Staging Layer
-        |
-        v
-Enterprise Data Warehouse
-        |
-        v
-  Semantic Model
-        |
-        v
-Power BI / Microsoft Fabric
+AdventureWorks-Enterprise-DataWarehouse
+│
+├── database/
+├── docs/
+├── powerbi/
+├── sample-data/
+├── tests/
+│
+├── README.md
+├── LICENSE
+└── .gitignore
 ```
 
-## Repository Structure
+## database/
 
-```text
-docs/          Architecture, design documents, ADRs, and diagrams
-database/      SQL Server database objects and initialization scripts
-etl/           ETL logic and orchestration assets
-tests/         Data quality and validation tests
-powerbi/       Power BI semantic models and reports
-azure/         Azure Data Factory and cloud resources
-fabric/        Microsoft Fabric implementation
-sample-data/   Controlled sample datasets when required
-```
+Contains all SQL Server database objects including:
 
-## Project Roadmap
+- Database initialization
+- Schemas
+- Dimensions
+- Fact tables
+- Staging tables
+- Stored procedures
+- Seed scripts
+- Views
+- Indexes
+- Security objects
 
-* `v0.1.0` — Repository foundation
-* `v0.2.0` — Database initialization
-* `v0.3.0` — Dimensions
-* `v0.4.0` — Fact tables
-* `v0.5.0` — ETL processes
-* `v0.6.0` — Power BI
-* `v0.7.0` — Azure Data Factory
-* `v0.8.0` — Microsoft Fabric
-* `v1.0.0` — Completed portfolio solution
+---
 
-## License
+## docs/
+
+Technical documentation, architecture diagrams and implementation guides.
+
+---
+
+## powerbi/
+
+Power BI semantic model, DAX measures and analytical dashboards.
+
+---
+
+## tests/
+
+Data quality validation and integration tests.
+
+---
+
+## sample-data/
+
+Sample datasets used for demonstrations and testing.
+
+---
+
+# Current Progress
+
+| Module | Status |
+|---------|:------:|
+| Repository Foundation | ✅ Completed |
+| Database Foundation | ✅ Completed |
+| Dimension History Management | 🚧 In Progress |
+| Dimensional Model Expansion | ⏳ Planned |
+| Fact Loading | ⏳ Planned |
+| Incremental Loading | ⏳ Planned |
+| Data Quality & Testing | ⏳ Planned |
+| Performance Optimization | ⏳ Planned |
+| Orchestration & Automation | ⏳ Planned |
+| Power BI Analytics | ⏳ Planned |
+| Production Readiness | ⏳ Planned |
+
+---
+
+# Current Features
+
+- ✅ Enterprise Data Warehouse architecture
+- ✅ Layered database schema design
+- ✅ Product staging layer
+- ✅ ETL audit framework
+- ✅ Full-load ETL pipeline
+- ✅ RowHash generation
+- ✅ Transaction handling
+- ✅ Error handling
+- ✅ Professional Git workflow
+- 🚧 Slowly Changing Dimensions (Type 2)
+
+---
+
+# Project Roadmap
+
+<p align="center">
+    <img src="docs/diagrams/project-roadmap.png" width="950">
+</p>
+
+---
+
+# License
 
 This project is licensed under the MIT License.
