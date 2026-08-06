@@ -2,9 +2,9 @@
 ===============================================================================
 Project  : AdventureWorks Enterprise Data Warehouse
 Database : AdventureWorks_EDW
-Script   : 001_LoadProductStage.sql
+Script   : etl.LoadDimProduct.sql
 Author   : Diego Suárez
-Purpose  : Perform a full refresh of product data into stg.Product.
+Purpose  : Load dw.DimProduct using Slowly Changing Dimension Type 2.
 Version  : 0.1.0
 ===============================================================================
 */
@@ -12,16 +12,36 @@ Version  : 0.1.0
 USE AdventureWorks_EDW;
 GO
 
-CREATE OR ALTER PROCEDURE etl.LoadProductStage
+CREATE OR ALTER PROCEDURE etl.LoadDimProduct
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    ---------------------------------------------------------------------------
+    -- Execution variables
+    ---------------------------------------------------------------------------
+
     DECLARE @ExecutionID BIGINT = NULL;
+    DECLARE @LoadDateTime DATETIME2(7) = SYSUTCDATETIME();
+
     DECLARE @RowsRead BIGINT = 0;
     DECLARE @RowsInserted BIGINT = 0;
+    DECLARE @RowsUpdated BIGINT = 0;
+
+    DECLARE @NewRowsInserted BIGINT = 0;
+    DECLARE @Type1RowsUpdated BIGINT = 0;
+    DECLARE @VersionsExpired BIGINT = 0;
+    DECLARE @NewVersionsInserted BIGINT = 0;
+
     DECLARE @ErrorMessage NVARCHAR(4000);
+
+    DECLARE @OpenEndedDateTime DATETIME2(7) =
+        CONVERT
+        (
+            DATETIME2(7),
+            '9999-12-31 23:59:59.9999999'
+        );
 
     BEGIN TRY
 
@@ -38,9 +58,9 @@ BEGIN
         )
         VALUES
         (
-            N'etl.LoadProductStage',
-            N'AdventureWorks2022.Production.Product',
+            N'etl.LoadDimProduct',
             N'stg.Product',
+            N'dw.DimProduct',
             SUSER_SNAME()
         );
 
@@ -48,22 +68,48 @@ BEGIN
             CONVERT(BIGINT, SCOPE_IDENTITY());
 
         -----------------------------------------------------------------------
-        -- Begin the staging load transaction
+        -- Capture the number of staging rows read
+        -----------------------------------------------------------------------
+
+        SELECT
+            @RowsRead = COUNT_BIG(*)
+        FROM stg.Product;
+
+        -----------------------------------------------------------------------
+        -- Begin the dimensional load transaction
         -----------------------------------------------------------------------
 
         BEGIN TRANSACTION;
 
         -----------------------------------------------------------------------
-        -- Full refresh: remove the previous staging snapshot
+        -- Store products with SCD Type 2 changes
         -----------------------------------------------------------------------
 
-        TRUNCATE TABLE stg.Product;
+        CREATE TABLE #ChangedProducts
+        (
+            ProductID INT NOT NULL,
+
+            CONSTRAINT PK_ChangedProducts
+                PRIMARY KEY CLUSTERED (ProductID)
+        );
+
+        INSERT INTO #ChangedProducts
+        (
+            ProductID
+        )
+        SELECT
+            s.ProductID
+        FROM stg.Product AS s
+        INNER JOIN dw.DimProduct AS d
+            ON s.ProductID = d.ProductID
+           AND d.IsCurrent = 1
+        WHERE s.RowHash <> d.RowHash;
 
         -----------------------------------------------------------------------
-        -- Extract, transform and load the current product snapshot
+        -- Insert products that do not have a current dimension member
         -----------------------------------------------------------------------
 
-        INSERT INTO stg.Product
+        INSERT INTO dw.DimProduct
         (
             ProductID,
             ProductName,
@@ -77,113 +123,142 @@ BEGIN
             SellStartDate,
             SellEndDate,
             DiscontinuedDate,
-            SourceModifiedDate,
-            RowHash
+            EffectiveStartDateTime,
+            EffectiveEndDateTime,
+            IsCurrent,
+            RowHash,
+            SourceModifiedDate
         )
         SELECT
-            p.ProductID,
-            p.Name AS ProductName,
-            p.ProductNumber,
-            p.Color,
-            p.Size,
-            p.StandardCost,
-            p.ListPrice,
+            s.ProductID,
+            s.ProductName,
+            s.ProductNumber,
+            s.Color,
+            s.Size,
+            s.StandardCost,
+            s.ListPrice,
+            s.SubcategoryName,
+            s.CategoryName,
+            s.SellStartDate,
+            s.SellEndDate,
+            s.DiscontinuedDate,
+            @LoadDateTime,
+            @OpenEndedDateTime,
+            1,
+            s.RowHash,
+            s.SourceModifiedDate
+        FROM stg.Product AS s
+        WHERE NOT EXISTS
+        (
+            SELECT 1
+            FROM dw.DimProduct AS d
+            WHERE d.ProductID = s.ProductID
+              AND d.IsCurrent = 1
+        );
 
-            COALESCE
-            (
-                ps.Name,
-                N'Uncategorized'
-            ) AS SubcategoryName,
-
-            COALESCE
-            (
-                pc.Name,
-                N'Uncategorized'
-            ) AS CategoryName,
-
-            p.SellStartDate,
-            p.SellEndDate,
-            p.DiscontinuedDate,
-            p.ModifiedDate AS SourceModifiedDate,
-
-            HASHBYTES
-            (
-                'SHA2_256',
-                CONCAT
-                (
-                    N'ProductName=', p.Name,
-                    N'|ProductNumber=', p.ProductNumber,
-                    N'|Color=', COALESCE(p.Color, N'<NULL>'),
-                    N'|Size=', COALESCE(p.Size, N'<NULL>'),
-
-                    N'|StandardCost=',
-                    CONVERT
-                    (
-                        NVARCHAR(50),
-                        CONVERT(DECIMAL(19, 4), p.StandardCost)
-                    ),
-
-                    N'|ListPrice=',
-                    CONVERT
-                    (
-                        NVARCHAR(50),
-                        CONVERT(DECIMAL(19, 4), p.ListPrice)
-                    ),
-
-                    N'|SubcategoryName=',
-                    COALESCE(ps.Name, N'Uncategorized'),
-
-                    N'|CategoryName=',
-                    COALESCE(pc.Name, N'Uncategorized'),
-
-                    N'|SellStartDate=',
-                    CONVERT
-                    (
-                        NVARCHAR(30),
-                        p.SellStartDate,
-                        126
-                    ),
-
-                    N'|SellEndDate=',
-                    COALESCE
-                    (
-                        CONVERT
-                        (
-                            NVARCHAR(30),
-                            p.SellEndDate,
-                            126
-                        ),
-                        N'<NULL>'
-                    ),
-
-                    N'|DiscontinuedDate=',
-                    COALESCE
-                    (
-                        CONVERT
-                        (
-                            NVARCHAR(30),
-                            p.DiscontinuedDate,
-                            126
-                        ),
-                        N'<NULL>'
-                    )
-                )
-            ) AS RowHash
-
-        FROM AdventureWorks2022.Production.Product AS p
-
-        LEFT JOIN AdventureWorks2022.Production.ProductSubcategory AS ps
-            ON p.ProductSubcategoryID = ps.ProductSubcategoryID
-
-        LEFT JOIN AdventureWorks2022.Production.ProductCategory AS pc
-            ON ps.ProductCategoryID = pc.ProductCategoryID;
+        SET @NewRowsInserted = @@ROWCOUNT;
 
         -----------------------------------------------------------------------
-        -- Capture the number of rows processed
+        -- Apply SCD Type 1 changes to unchanged current versions
         -----------------------------------------------------------------------
 
-        SET @RowsInserted = @@ROWCOUNT;
-        SET @RowsRead = @RowsInserted;
+        UPDATE d
+        SET
+            d.ProductName = s.ProductName,
+            d.ProductNumber = s.ProductNumber,
+            d.SourceModifiedDate = s.SourceModifiedDate
+        FROM dw.DimProduct AS d
+        INNER JOIN stg.Product AS s
+            ON d.ProductID = s.ProductID
+        WHERE d.IsCurrent = 1
+          AND d.RowHash = s.RowHash
+          AND
+          (
+              d.ProductName <> s.ProductName
+              OR d.ProductNumber <> s.ProductNumber
+              OR d.SourceModifiedDate <> s.SourceModifiedDate
+          );
+
+        SET @Type1RowsUpdated = @@ROWCOUNT;
+
+        -----------------------------------------------------------------------
+        -- Expire current versions with SCD Type 2 changes
+        -----------------------------------------------------------------------
+
+        UPDATE d
+        SET
+            d.EffectiveEndDateTime = @LoadDateTime,
+            d.IsCurrent = 0
+        FROM dw.DimProduct AS d
+        INNER JOIN #ChangedProducts AS c
+            ON d.ProductID = c.ProductID
+        WHERE d.IsCurrent = 1;
+
+        SET @VersionsExpired = @@ROWCOUNT;
+
+        -----------------------------------------------------------------------
+        -- Insert the new current versions
+        -----------------------------------------------------------------------
+
+        INSERT INTO dw.DimProduct
+        (
+            ProductID,
+            ProductName,
+            ProductNumber,
+            Color,
+            Size,
+            StandardCost,
+            ListPrice,
+            SubcategoryName,
+            CategoryName,
+            SellStartDate,
+            SellEndDate,
+            DiscontinuedDate,
+            EffectiveStartDateTime,
+            EffectiveEndDateTime,
+            IsCurrent,
+            RowHash,
+            SourceModifiedDate
+        )
+        SELECT
+            s.ProductID,
+            s.ProductName,
+            s.ProductNumber,
+            s.Color,
+            s.Size,
+            s.StandardCost,
+            s.ListPrice,
+            s.SubcategoryName,
+            s.CategoryName,
+            s.SellStartDate,
+            s.SellEndDate,
+            s.DiscontinuedDate,
+            @LoadDateTime,
+            @OpenEndedDateTime,
+            1,
+            s.RowHash,
+            s.SourceModifiedDate
+        FROM stg.Product AS s
+        INNER JOIN #ChangedProducts AS c
+            ON s.ProductID = c.ProductID;
+
+        SET @NewVersionsInserted = @@ROWCOUNT;
+
+        -----------------------------------------------------------------------
+        -- Calculate audit totals
+        -----------------------------------------------------------------------
+
+        SET @RowsInserted =
+            @NewRowsInserted
+            + @NewVersionsInserted;
+
+        SET @RowsUpdated =
+            @Type1RowsUpdated
+            + @VersionsExpired;
+
+        -----------------------------------------------------------------------
+        -- Confirm the dimensional load
+        -----------------------------------------------------------------------
 
         COMMIT TRANSACTION;
 
@@ -194,10 +269,10 @@ BEGIN
         UPDATE audit.ETLExecutionLog
         SET
             EndTime = SYSUTCDATETIME(),
-            [Status] = 'Succeeded',
+            [Status] = N'Succeeded',
             RowsRead = @RowsRead,
             RowsInserted = @RowsInserted,
-            RowsUpdated = 0,
+            RowsUpdated = @RowsUpdated,
             RowsRejected = 0,
             ErrorMessage = NULL
         WHERE ExecutionID = @ExecutionID;
@@ -207,7 +282,7 @@ BEGIN
     BEGIN CATCH
 
         -----------------------------------------------------------------------
-        -- Roll back an incomplete staging load
+        -- Roll back an incomplete dimensional load
         -----------------------------------------------------------------------
 
         IF XACT_STATE() <> 0
@@ -216,7 +291,7 @@ BEGIN
         END;
 
         -----------------------------------------------------------------------
-        -- Build a diagnostic error message
+        -- Build the diagnostic error message
         -----------------------------------------------------------------------
 
         SET @ErrorMessage =
@@ -238,7 +313,7 @@ BEGIN
             UPDATE audit.ETLExecutionLog
             SET
                 EndTime = SYSUTCDATETIME(),
-                [Status] = 'Failed',
+                [Status] = N'Failed',
                 RowsRead = @RowsRead,
                 RowsInserted = 0,
                 RowsUpdated = 0,
@@ -248,11 +323,29 @@ BEGIN
         END;
 
         -----------------------------------------------------------------------
-        -- Propagate the original error to the caller or orchestrator
+        -- Propagate the original error
         -----------------------------------------------------------------------
 
         THROW;
 
     END CATCH;
 END;
+GO
+
+
+
+
+USE AdventureWorks_EDW;
+GO
+
+SELECT
+    s.name AS SchemaName,
+    p.name AS ProcedureName,
+    p.create_date AS CreatedAt,
+    p.modify_date AS ModifiedAt
+FROM sys.procedures AS p
+INNER JOIN sys.schemas AS s
+    ON p.schema_id = s.schema_id
+WHERE s.name = N'etl'
+  AND p.name = N'LoadDimProduct';
 GO
