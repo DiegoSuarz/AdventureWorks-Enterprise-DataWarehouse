@@ -8,6 +8,10 @@ The format is inspired by Keep a Changelog and the project follows Semantic Vers
 
 ## [Unreleased]
 
+---
+
+## [v1.1.0] - 2026-08-06
+
 ### Added
 
 - Implemented `etl.LoadDimProduct` using Slowly Changing Dimension Type 2 (SCD Type 2).
