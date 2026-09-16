@@ -20,3 +20,17 @@ Thumbs.db
 # Power BI temporary files
 *.pbix.autosave
 ~$*.pbix
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
