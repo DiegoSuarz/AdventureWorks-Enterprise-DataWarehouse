@@ -6,12 +6,12 @@ This document provides a centralized catalog of the tables currently implemented
 
 The catalog describes:
 
-- table purpose;
-- schema and layer;
-- grain;
-- main columns;
-- dimensional strategy;
-- role within the ETL architecture.
+- table purpose
+- schema and layer
+- grain
+- main columns
+- dimensional strategy
+- role within the ETL architecture
 
 This document evolves as new warehouse objects are implemented.
 
@@ -25,11 +25,17 @@ AdventureWorks_EDW
 ├── dw
 │   ├── DimDate
 │   ├── DimProduct
-│   └── DimCustomer
+│   ├── DimCustomer
+│   ├── DimTerritory
+│   ├── DimSalesPerson
+│   └── DimShipMethod
 │
 ├── stg
 │   ├── Product
-│   └── Customer
+│   ├── Customer
+│   ├── Territory
+│   ├── SalesPerson
+│   └── ShipMethod
 │
 └── audit
     └── ETLExecutionLog
@@ -38,12 +44,12 @@ AdventureWorks_EDW
 Current table count:
 
 ```text
-Dimension Tables : 3
-Staging Tables   : 2
+Dimension Tables : 6
+Staging Tables   : 5
 Audit Tables     : 1
 Fact Tables      : 0
 --------------------
-Total Tables     : 6
+Total Tables     : 12
 ```
 
 ---
@@ -194,6 +200,15 @@ ProductID
    └── Current Version
 ```
 
+### Current Validated State
+
+```text
+Distinct Products    : 504
+Current Versions     : 504
+Historical Versions  : 2
+Total Versions       : 506
+```
+
 ---
 
 ## 5. `dw.DimCustomer`
@@ -283,9 +298,322 @@ Historical Versions  : 0
 
 ---
 
+## 6. `dw.DimTerritory`
+
+### Purpose
+
+Provides a consistent analytical representation of AdventureWorks sales territories for analysis by territory, country/region, and commercial territory group.
+
+### Grain
+
+```text
+One row = one analytical version of a TerritoryID
+```
+
+### Business Key
+
+```text
+TerritoryID
+```
+
+### Surrogate Key
+
+```text
+TerritoryKey
+```
+
+### SCD Strategy
+
+```text
+Type 0 + Type 1 + Type 2
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `TerritoryKey` | Warehouse-generated surrogate key identifying a specific territory version. |
+| `TerritoryID` | AdventureWorks territory business key. |
+| `TerritoryName` | Sales territory name. |
+| `CountryRegionCode` | Source country/region code. |
+| `CountryRegionName` | Descriptive country/region name. |
+| `TerritoryGroup` | Commercial territory group. |
+| `EffectiveStartDateTime` | Beginning of validity for this dimensional version. |
+| `EffectiveEndDateTime` | End of validity for this dimensional version. |
+| `IsCurrent` | Indicates whether the row is the current territory version. |
+| `RowHash` | SHA2-256 hash used to detect Type 2 changes. |
+| `SourceModifiedDate` | Latest relevant source modification timestamp. |
+| `CreatedAt` | Timestamp at which the dimensional row was created in the EDW. |
+
+### Attribute Classification
+
+```text
+Type 0
+-------
+TerritoryID
+
+Type 1
+-------
+TerritoryName
+CountryRegionName
+
+Type 2
+-------
+CountryRegionCode
+TerritoryGroup
+```
+
+### Analytical Hierarchy
+
+```text
+TerritoryGroup
+    ↓
+CountryRegion
+    ↓
+Territory
+```
+
+### Integrity Rule
+
+A filtered unique index guarantees that each `TerritoryID` has at most one current version.
+
+Historical validity follows the half-open interval:
+
+```text
+[EffectiveStartDateTime, EffectiveEndDateTime)
+```
+
+### Current Validated State
+
+```text
+Distinct Territories : 10
+Current Versions      : 10
+Historical Versions   : 3
+Total Versions        : 13
+```
+
+The historical versions were intentionally generated during controlled SCD Type 2 validation.
+
+---
+
+## 7. `dw.DimSalesPerson`
+
+### Purpose
+
+Provides a consolidated analytical representation of AdventureWorks sales personnel using information from the Sales, Person, and Employee source domains.
+
+### Grain
+
+```text
+One row = one analytical version of a BusinessEntityID
+```
+
+### Business Key
+
+```text
+BusinessEntityID
+```
+
+### Surrogate Key
+
+```text
+SalesPersonKey
+```
+
+### SCD Strategy
+
+```text
+Type 0 + Type 1 + Type 2
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `SalesPersonKey` | Warehouse-generated surrogate key identifying a specific sales-person version. |
+| `BusinessEntityID` | AdventureWorks business key shared across contributing source entities. |
+| `SalesPersonName` | Consolidated business-friendly sales-person name. |
+| `FirstName` | First name. |
+| `MiddleName` | Middle name when available. |
+| `LastName` | Last name. |
+| `JobTitle` | Employment role. |
+| `HireDate` | Employee hire date. |
+| `CurrentFlag` | Current employee-state indicator. |
+| `SalesQuota` | Sales quota when applicable. |
+| `Bonus` | Bonus amount. |
+| `CommissionPct` | Commission percentage. |
+| `EffectiveStartDateTime` | Beginning of validity for this dimensional version. |
+| `EffectiveEndDateTime` | End of validity for this dimensional version. |
+| `IsCurrent` | Indicates whether the row is the current sales-person version. |
+| `RowHash` | SHA2-256 hash used to detect Type 2 changes. |
+| `SourceModifiedDate` | Latest relevant source modification across contributing entities. |
+| `CreatedAt` | Timestamp at which the dimensional row was created in the EDW. |
+
+### Attribute Classification
+
+```text
+Type 0
+-------
+BusinessEntityID
+HireDate
+
+Type 1
+-------
+SalesPersonName
+FirstName
+MiddleName
+LastName
+
+Type 2
+-------
+JobTitle
+CurrentFlag
+SalesQuota
+Bonus
+CommissionPct
+```
+
+### Territory Modeling Decision
+
+`TerritoryID` is intentionally excluded from `dw.DimSalesPerson`.
+
+SalesPerson and Territory remain independent analytical dimensions:
+
+```text
+Who performed the sale?
+→ dw.DimSalesPerson
+
+Where did the sale occur?
+→ dw.DimTerritory
+```
+
+The source `TerritoryID` is retained in `stg.SalesPerson` for lineage, profiling, and validation.
+
+### Integrity Rule
+
+A filtered unique index guarantees that each `BusinessEntityID` has at most one current version.
+
+Historical validity follows:
+
+```text
+[EffectiveStartDateTime, EffectiveEndDateTime)
+```
+
+### Current Validated State
+
+```text
+Distinct Sales Persons : 17
+Current Versions        : 17
+Historical Versions     : 3
+Total Versions          : 20
+```
+
+The historical versions were intentionally generated during controlled SCD Type 2 validation.
+
+---
+
+## 8. `dw.DimShipMethod`
+
+### Purpose
+
+Provides the analytical shipping-method dimension while preserving historically relevant tariff changes.
+
+### Grain
+
+```text
+One row = one analytical version of a ShipMethodID
+```
+
+### Business Key
+
+```text
+ShipMethodID
+```
+
+### Surrogate Key
+
+```text
+ShipMethodKey
+```
+
+### SCD Strategy
+
+```text
+Type 0 + Type 1 + Type 2
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `ShipMethodKey` | Warehouse-generated surrogate key identifying a specific shipping-method version. |
+| `ShipMethodID` | AdventureWorks shipping-method business key. |
+| `ShipMethodName` | Shipping company or shipping-method name. |
+| `ShipBase` | Minimum shipping charge. |
+| `ShipRate` | Shipping charge per pound. |
+| `EffectiveStartDateTime` | Beginning of validity for this dimensional version. |
+| `EffectiveEndDateTime` | End of validity for this dimensional version. |
+| `IsCurrent` | Indicates whether the row is the current shipping-method version. |
+| `RowHash` | SHA2-256 hash used to detect tariff changes. |
+| `SourceModifiedDate` | Source modification timestamp. |
+| `CreatedAt` | Timestamp at which the dimensional row was created in the EDW. |
+
+### Attribute Classification
+
+```text
+Type 0
+-------
+ShipMethodID
+
+Type 1
+-------
+ShipMethodName
+
+Type 2
+-------
+ShipBase
+ShipRate
+```
+
+### Analytical Interpretation
+
+`ShipBase` and `ShipRate` are numerical attributes, but they are not transactional fact measures.
+
+They describe the tariff configuration of a shipping method:
+
+```text
+ShipBase = minimum shipping charge
+ShipRate = shipping charge per pound
+```
+
+Transactional freight amounts belong to individual business events and will be modeled in the future sales fact process.
+
+### Integrity Rule
+
+A filtered unique index guarantees that each `ShipMethodID` has at most one current version.
+
+Historical validity follows:
+
+```text
+[EffectiveStartDateTime, EffectiveEndDateTime)
+```
+
+### Current Validated State
+
+```text
+Distinct Shipping Methods : 5
+Current Versions           : 5
+Historical Versions        : 3
+Total Versions             : 8
+```
+
+The historical versions were intentionally generated during controlled SCD Type 2 validation.
+
+---
+
 # Staging Layer
 
-## 6. `stg.Product`
+## 9. `stg.Product`
 
 ### Purpose
 
@@ -335,7 +663,7 @@ dw.DimProduct
 
 ---
 
-## 7. `stg.Customer`
+## 10. `stg.Customer`
 
 ### Purpose
 
@@ -404,9 +732,164 @@ Store               : 1,336
 
 ---
 
+## 11. `stg.Territory`
+
+### Purpose
+
+Provides the normalized current-state snapshot of AdventureWorks sales territories before dimensional processing.
+
+### Grain
+
+```text
+One row = current state of one TerritoryID
+```
+
+### Sources
+
+```text
+Sales.SalesTerritory
+Person.CountryRegion
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `TerritoryID` | AdventureWorks territory business key and staging primary key. |
+| `TerritoryName` | Sales territory name. |
+| `CountryRegionCode` | Source country/region code. |
+| `CountryRegionName` | Descriptive country/region name. |
+| `TerritoryGroup` | Commercial territory group. |
+| `SourceModifiedDate` | Latest relevant modification timestamp from contributing source entities. |
+| `ExtractedAt` | Timestamp at which the row was extracted into staging. |
+| `RowHash` | SHA2-256 hash generated from Territory SCD Type 2 attributes. |
+
+### Pipeline Role
+
+```text
+Sales.SalesTerritory
+        +
+Person.CountryRegion
+        ↓
+stg.Territory
+        ↓
+dw.DimTerritory
+```
+
+### Validated Staging State
+
+```text
+Total Territories    : 10
+Distinct Territories : 10
+```
+
+---
+
+## 12. `stg.SalesPerson`
+
+### Purpose
+
+Provides the consolidated current-state representation of AdventureWorks sales personnel before dimensional processing.
+
+### Grain
+
+```text
+One row = current state of one BusinessEntityID
+```
+
+### Sources
+
+```text
+Sales.SalesPerson
+Person.Person
+HumanResources.Employee
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `BusinessEntityID` | Sales-person business key and staging primary key. |
+| `SalesPersonName` | Consolidated analytical full name. |
+| `FirstName` | First name. |
+| `MiddleName` | Middle name when available. |
+| `LastName` | Last name. |
+| `JobTitle` | Current employment role. |
+| `HireDate` | Employee hire date. |
+| `CurrentFlag` | Current employee-state indicator. |
+| `SalesQuota` | Current sales quota when applicable. |
+| `Bonus` | Current bonus amount. |
+| `CommissionPct` | Current commission percentage. |
+| `TerritoryID` | Source territory reference retained for lineage and validation. |
+| `SourceModifiedDate` | Latest modification timestamp from contributing source entities. |
+| `ExtractedAt` | Timestamp at which the row was extracted into staging. |
+| `RowHash` | SHA2-256 hash generated from SalesPerson SCD Type 2 attributes. |
+
+### Important Modeling Rule
+
+`TerritoryID` remains in staging for lineage and validation but is intentionally excluded from `dw.DimSalesPerson`.
+
+### Validated Staging State
+
+```text
+Total Sales Persons    : 17
+Distinct Sales Persons : 17
+```
+
+---
+
+## 13. `stg.ShipMethod`
+
+### Purpose
+
+Provides the normalized current-state shipping-method snapshot before dimensional processing.
+
+### Grain
+
+```text
+One row = current state of one ShipMethodID
+```
+
+### Source
+
+```text
+Purchasing.ShipMethod
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `ShipMethodID` | Shipping-method business key and staging primary key. |
+| `ShipMethodName` | Shipping company or shipping-method name. |
+| `ShipBase` | Minimum shipping charge. |
+| `ShipRate` | Shipping charge per pound. |
+| `SourceModifiedDate` | Source modification timestamp. |
+| `ExtractedAt` | Timestamp at which the row was extracted into staging. |
+| `RowHash` | SHA2-256 hash generated from Type 2 tariff attributes. |
+
+### Pipeline Role
+
+```text
+Purchasing.ShipMethod
+        ↓
+stg.ShipMethod
+        ↓
+dw.DimShipMethod
+```
+
+### Validated Staging State
+
+```text
+Total Shipping Methods    : 5
+Distinct Shipping Methods : 5
+```
+
+---
+
 # Audit Layer
 
-## 8. `audit.ETLExecutionLog`
+## 14. `audit.ETLExecutionLog`
 
 ### Purpose
 
@@ -439,11 +922,11 @@ One row = one ETL process execution
 ### Example
 
 ```text
-ExecutionID : 19
-ProcessName : etl.LoadDimCustomer
+ExecutionID : 43
+ProcessName : etl.LoadDimShipMethod
 Status      : Succeeded
-RowsRead    : 19820
-RowsInserted: 0
+RowsRead    : 5
+RowsInserted: 1
 RowsUpdated : 1
 RowsRejected: 0
 ```
@@ -459,71 +942,88 @@ The audit layer provides evidence for:
 - error diagnosis;
 - operational monitoring.
 
+### Current ETL Health
+
+At Module 4 closure, the latest execution of each implemented ETL process was validated successfully:
+
+```text
+ETL Processes       : 10
+Healthy Processes   : 10
+Unhealthy Processes : 0
+```
+
 ---
 
-# 9. Layer Summary
+# 15. Layer Summary
 
 | Schema | Table | Type | Purpose |
 |---|---|---|---|
 | `dw` | `DimDate` | Dimension | Calendar analysis |
 | `dw` | `DimProduct` | Dimension | Product analysis and historical tracking |
 | `dw` | `DimCustomer` | Dimension | Customer analysis |
+| `dw` | `DimTerritory` | Dimension | Geographic and commercial territory analysis |
+| `dw` | `DimSalesPerson` | Dimension | Sales-person and commercial-context analysis |
+| `dw` | `DimShipMethod` | Dimension | Shipping method and tariff analysis |
 | `stg` | `Product` | Staging | Product source snapshot |
 | `stg` | `Customer` | Staging | Customer source snapshot |
+| `stg` | `Territory` | Staging | Territory source snapshot |
+| `stg` | `SalesPerson` | Staging | Consolidated sales-person source snapshot |
+| `stg` | `ShipMethod` | Staging | Shipping-method source snapshot |
 | `audit` | `ETLExecutionLog` | Audit | ETL observability and execution tracking |
 
 ---
 
-# 10. Current Architecture
+# 16. Current Architecture
 
 ```text
 AdventureWorks2022
         │
         ▼
-┌──────────────────────┐
-│    Staging Layer     │
-│                      │
-│ stg.Product          │
-│ stg.Customer         │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Dimensional Layer    │
-│                      │
-│ dw.DimDate           │
-│ dw.DimProduct        │
-│ dw.DimCustomer       │
-└──────────┬───────────┘
-           │
-           ▼
-     Future FactSales
+┌────────────────────────┐
+│     Staging Layer      │
+│                        │
+│ stg.Product            │
+│ stg.Customer           │
+│ stg.Territory          │
+│ stg.SalesPerson        │
+│ stg.ShipMethod         │
+└───────────┬────────────┘
+            │
+            ▼
+┌────────────────────────┐
+│   Dimensional Layer    │
+│                        │
+│ dw.DimDate             │
+│ dw.DimProduct          │
+│ dw.DimCustomer         │
+│ dw.DimTerritory        │
+│ dw.DimSalesPerson      │
+│ dw.DimShipMethod       │
+└───────────┬────────────┘
+            │
+            ▼
+      Future FactSales
 
-           │
-           │
-           ▼
-
-┌──────────────────────┐
-│     Audit Layer      │
-│                      │
-│ ETLExecutionLog      │
-└──────────────────────┘
+            │
+            ▼
+┌────────────────────────┐
+│      Audit Layer       │
+│                        │
+│ audit.ETLExecutionLog  │
+└────────────────────────┘
 ```
 
 ---
 
-# 11. Planned Tables
+# 17. Planned Tables
 
-The following objects have not yet been implemented:
+The next major warehouse table planned after the dimensional-model expansion is:
 
 ```text
-dw.DimTerritory
-dw.DimSalesPerson
-dw.DimShipMethod
 dw.FactSales
 ```
 
-They will be added to this catalog when their corresponding micro modules are completed.
+Fact-table implementation belongs to the next project module and is not part of release `v1.2.0`.
 
 ---
 

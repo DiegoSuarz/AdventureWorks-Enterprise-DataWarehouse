@@ -286,7 +286,7 @@ Additional indexes will be added only if analytical workload justifies them.
 stg.Territory
 ```
 
-The staging table will contain one current-state row per `TerritoryID`.
+The staging table contains one current-state row per `TerritoryID`.
 
 No history is stored in staging.
 
@@ -300,14 +300,14 @@ Expected current source row count:
 
 ## 17. ETL Objects
 
-Planned procedures:
+Implemented procedures:
 
 ```text
 etl.LoadTerritoryStage
 etl.LoadDimTerritory
 ```
 
-Expected flow:
+Implemented flow:
 
 ```text
 Sales.SalesTerritory
@@ -328,7 +328,7 @@ dw.DimTerritory
 
 ## 18. Validation Criteria
 
-The implementation will be considered valid when:
+The implementation was validated against the following criteria:
 
 - Exactly 10 current source territories are represented
 - Each `TerritoryID` resolves to a valid country/region
@@ -361,8 +361,15 @@ The implementation will be considered valid when:
 ```text
 Design: Approved
 Source Profiling: Completed
-Implementation: Pending
-SCD Strategy: Type 1 + Type 2
-Target Release: v1.2.0
-Module: 4.2 DimTerritory
+Implementation: Completed
+Validation: Completed
+SCD Strategy: Type 0 + Type 1 + Type 2
+
+Current Source Count: 10
+Current Versions: 10
+Historical Versions: 3
+Total Versions: 13
+
+Target Release: v1.2.0 — Dimensional Model Expansion
+Module: 4.2 — DimTerritory
 ```
