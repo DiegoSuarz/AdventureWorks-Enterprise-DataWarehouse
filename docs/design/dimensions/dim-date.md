@@ -184,13 +184,13 @@ Additional indexes are unnecessary due to the relatively small dimension size.
 
 ## 13. ETL Objects
 
-Planned objects:
+Implemented objects:
 
 ```text
 etl.LoadDimDate
 ```
 
-Expected flow:
+Implemented flow:
 
 ```text
 Generate Calendar
@@ -204,7 +204,7 @@ dw.DimDate
 
 ## 14. Validation Criteria
 
-The implementation is considered valid when:
+The implementation was validated against the following criteria:
 
 - no duplicate dates exist;
 - DateKey matches the calendar date;
@@ -220,6 +220,7 @@ The implementation is considered valid when:
 ```text
 Design: Approved
 Implementation: Completed
+Validation: Completed
 Release: v1.0.0
 Module: Database Foundation
 ```

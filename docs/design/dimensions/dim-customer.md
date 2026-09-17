@@ -450,13 +450,13 @@ Additional indexes will only be introduced after observing real ETL or analytica
 
 ## 16. Staging Object
 
-The corresponding staging table will be:
+The corresponding staging table is:
 
 ```text
 stg.Customer
 ```
 
-It will contain one consolidated current-state representation for every `Sales.Customer.CustomerID`.
+It contains one consolidated current-state representation for every `Sales.Customer.CustomerID`.
 
 Expected number of source business keys based on the current AdventureWorks dataset:
 
@@ -464,20 +464,20 @@ Expected number of source business keys based on the current AdventureWorks data
 19,820 customers
 ```
 
-The staging layer will not preserve historical versions.
+The staging layer does not preserve historical versions.
 
 ---
 
 ## 17. ETL Objects
 
-Planned procedures:
+Implemented procedures:
 
 ```text
 etl.LoadCustomerStage
 etl.LoadDimCustomer
 ```
 
-Expected flow:
+Implemented flow:
 
 ```text
 Sales.Customer
@@ -503,7 +503,7 @@ dw.DimCustomer
 
 ## 18. Validation Criteria
 
-The implementation will be considered valid when:
+The implementation was validated against the following criteria:
 
 - exactly 19,820 source customers are represented;
 - each `CustomerID` appears once as current;
@@ -543,8 +543,15 @@ The implementation will be considered valid when:
 ```text
 Design: Approved
 Source Profiling: Completed
-Implementation: Pending
+Implementation: Completed
+Validation: Completed
 SCD Strategy: Type 1
-Target Release: v1.2.0
-Module: Dimensional Model Expansion
+
+Current Source Count: 19,820
+Current Versions: 19,820
+Historical Versions: 0
+Total Versions: 19,820
+
+Target Release: v1.2.0 — Dimensional Model Expansion
+Module: 4.1 — DimCustomer
 ```

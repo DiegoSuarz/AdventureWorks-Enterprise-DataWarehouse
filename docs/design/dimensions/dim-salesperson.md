@@ -593,17 +593,17 @@ Additional indexes will only be introduced after observing actual ETL or analyti
 
 ## 19. Staging Object
 
-The corresponding staging table will be:
+The corresponding staging table is:
 
 ```text
 stg.SalesPerson
 ```
 
-It will contain the consolidated current-state representation of each `Sales.SalesPerson.BusinessEntityID`.
+It contains the consolidated current-state representation of each `Sales.SalesPerson.BusinessEntityID`.
 
 Staging will not preserve history.
 
-Proposed staging-specific lineage attribute:
+Staging-specific lineage attribute:
 
 ```text
 TerritoryID
@@ -621,14 +621,14 @@ Expected source count:
 
 ## 20. ETL Objects
 
-Planned procedures:
+Implemented procedures:
 
 ```text
 etl.LoadSalesPersonStage
 etl.LoadDimSalesPerson
 ```
 
-Expected flow:
+Implemented flow:
 
 ```text
 Sales.SalesPerson
@@ -718,7 +718,7 @@ The current version is expired first and the new version receives the latest Typ
 
 ## 23. Validation Criteria
 
-The implementation will be considered valid when:
+The implementation was validated against the following criteria:
 
 - Exactly 17 current source sales persons are represented.
 - All `BusinessEntityID` values are unique in staging.
@@ -759,13 +759,16 @@ The implementation will be considered valid when:
 ```text
 Design: Approved
 Source Profiling: Completed
-Implementation: Pending
+Implementation: Completed
+Validation: Completed
 
 SCD Strategy:
 Type 0 + Type 1 + Type 2
 
-Current Source Count:
-17 Sales Persons
+Current Source Count: 17
+Current Versions: 17
+Historical Versions: 3
+Total Versions: 20
 
 Target Release:
 v1.2.0 — Dimensional Model Expansion

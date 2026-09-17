@@ -178,7 +178,7 @@ This prevents gaps and overlaps between consecutive versions.
 
 At most one current row may exist for each `ShipMethodID`.
 
-This rule will be enforced with a filtered unique index on the business key
+This rule is enforced with a filtered unique index on the business key
 where:
 
 `IsCurrent = 1`
@@ -266,12 +266,32 @@ were overwritten in the source before the data warehouse captured them.
 
 ## 15. Load Flow
 
-The expected data flow is:
+The implemented data flow is:
 
 `Purchasing.ShipMethod`
 → `stg.ShipMethod`
 → `dw.DimShipMethod`
 
-The staging layer will provide a normalized current-state representation of
-the source and calculate the Type 2 hash required by the dimension-loading
+The staging layer provides a normalized current-state representation of
+the source and calculates the Type 2 hash required by the dimension-loading
 procedure.
+
+---
+
+## 16. Implementation Status
+
+```text
+Design: Approved
+Source Profiling: Completed
+Implementation: Completed
+Validation: Completed
+SCD Strategy: Type 0 + Type 1 + Type 2
+
+Current Source Count: 5
+Current Versions: 5
+Historical Versions: 3
+Total Versions: 8
+
+Target Release: v1.2.0 — Dimensional Model Expansion
+Module: 4.4 — DimShipMethod
+```

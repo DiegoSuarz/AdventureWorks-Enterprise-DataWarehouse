@@ -2,7 +2,7 @@
 
 <div align="center">
 
-> Enterprise Data Warehouse built from scratch using SQL Server and T-SQL, following real-world Data Engineering best practices.
+> Production-oriented Data Warehouse project built from scratch with SQL Server and T-SQL, using dimensional modeling, audited ETL, historical tracking, and professional Git workflows.
 
 <br>
 
@@ -20,81 +20,162 @@
 # Table of Contents
 
 - [Overview](#overview)
-- [Highlights](#highlights)
 - [Business Problem](#business-problem)
-- [Design Principles](#design-principles)
-- [Solution Architecture](#solution-architecture)
+- [Current Architecture](#current-architecture)
+- [Implemented Data Model](#implemented-data-model)
+- [Engineering Highlights](#engineering-highlights)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
+- [Validation Status](#validation-status)
 - [Current Progress](#current-progress)
-- [Current Features](#current-features)
-- [Project Roadmap](#project-roadmap)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
 
 # Overview
 
-AdventureWorks Enterprise Data Warehouse is an end-to-end Data Warehouse project built from scratch using SQL Server.
+**AdventureWorks Enterprise Data Warehouse** is a portfolio Data Engineering project that transforms the AdventureWorks OLTP database into a structured analytical platform.
 
-The project demonstrates the design and implementation of a production-oriented analytical platform by applying dimensional modeling, ETL development, auditing, Slowly Changing Dimensions (SCD Type 2), incremental loading, performance optimization and analytical reporting with Power BI.
+The project is developed as an engineering system rather than a collection of isolated SQL exercises. It applies:
 
-Rather than serving as a collection of SQL exercises, this repository aims to simulate the development of an enterprise-grade Data Warehouse following professional software engineering practices.
+- dimensional modeling;
+- staging and warehouse separation;
+- audited ETL execution;
+- idempotent load patterns;
+- Slowly Changing Dimensions;
+- SHA2-256 change detection;
+- temporal version management;
+- validation and reconciliation;
+- version-controlled database development.
 
----
-
-# Highlights
-
-- Enterprise-oriented architecture
-- Layered ETL design
-- Modular SQL development
-- Slowly Changing Dimensions (Type 2)
-- Incremental loading strategy
-- ETL auditing
-- Power BI analytics
-- Professional Git workflow
+The current physical model contains **6 dimensions, 5 staging tables, 10 ETL procedures, and a centralized ETL audit table**.
 
 ---
 
 # Business Problem
 
-Operational databases are optimized for transactional workloads but are not designed for analytical reporting.
+Operational databases are optimized for transactional workloads. Analytical reporting requires a different model that provides stable business keys, descriptive dimensions, historical context, traceable transformations, and repeatable data-loading processes.
 
-This project transforms transactional data from the AdventureWorks OLTP database into an enterprise-ready analytical model capable of supporting historical analysis, business intelligence and executive reporting.
-
----
-
-# Design Principles
-
-This project follows engineering practices commonly adopted in enterprise Data Warehouse solutions.
-
-- Layered architecture
-- Separation of concerns
-- Modular SQL scripts
-- Audit-first ETL design
-- Idempotent loading strategy
-- Version-controlled database development
-- Incremental project evolution
+This project reorganizes AdventureWorks operational data into an analytical architecture designed to support future business intelligence and reporting workloads.
 
 ---
 
-# Solution Architecture
+# Current Architecture
 
-<p align="center">
-    <img src="docs/diagrams/architecture.png" width="950">
-</p>
+```text
+AdventureWorks2022
+        │
+        ▼
+┌────────────────────────┐
+│     Staging Layer      │
+│                        │
+│ stg.Product            │
+│ stg.Customer           │
+│ stg.Territory          │
+│ stg.SalesPerson        │
+│ stg.ShipMethod         │
+└───────────┬────────────┘
+            │
+            ▼
+┌────────────────────────┐
+│   Dimensional Layer    │
+│                        │
+│ dw.DimDate             │
+│ dw.DimProduct          │
+│ dw.DimCustomer         │
+│ dw.DimTerritory        │
+│ dw.DimSalesPerson      │
+│ dw.DimShipMethod       │
+└────────────────────────┘
+
+        ETL execution
+            │
+            ▼
+┌────────────────────────┐
+│      Audit Layer       │
+│                        │
+│ audit.ETLExecutionLog  │
+└────────────────────────┘
+
+Future analytical layers
+        │
+        ├── Fact model
+        └── Power BI
+```
+
+The warehouse uses four principal schemas:
+
+| Schema | Responsibility |
+|---|---|
+| `stg` | Normalized current-state source snapshots |
+| `dw` | Analytical dimensional objects |
+| `etl` | Stored procedures that move and transform data |
+| `audit` | Operational ETL execution history |
+
+---
+
+# Implemented Data Model
+
+## Dimensions
+
+| Dimension | Business Key | History Strategy | Current Members |
+|---|---|---|---:|
+| `dw.DimDate` | `DateKey` | Immutable calendar | 9,496 |
+| `dw.DimProduct` | `ProductID` | Type 0 + Type 1 + Type 2 | 504 |
+| `dw.DimCustomer` | `CustomerID` | Type 1 | 19,820 |
+| `dw.DimTerritory` | `TerritoryID` | Type 0 + Type 1 + Type 2 | 10 |
+| `dw.DimSalesPerson` | `BusinessEntityID` | Type 0 + Type 1 + Type 2 | 17 |
+| `dw.DimShipMethod` | `ShipMethodID` | Type 0 + Type 1 + Type 2 | 5 |
+
+Controlled SCD validation has intentionally produced historical versions in Product, Territory, SalesPerson, and ShipMethod.
+
+## Staging
+
+Current staging snapshots:
+
+```text
+stg.Product       : 504 rows
+stg.Customer      : 19,820 rows
+stg.Territory     : 10 rows
+stg.SalesPerson   : 17 rows
+stg.ShipMethod    : 5 rows
+```
+
+Staging stores current source state only. Historical dimensional versions are maintained in the `dw` layer.
+
+---
+
+# Engineering Highlights
+
+- Layered `stg` → `dw` ETL architecture
+- SQL Server surrogate keys
+- Business-key-driven dimensional loading
+- SCD Type 1 and Type 2 processing
+- SHA2-256 `RowHash` change detection
+- Half-open temporal validity: `[Start, End)`
+- Filtered unique indexes for one current version per business key
+- Protection of simultaneous Type 1 + Type 2 changes
+- Idempotent ETL behavior
+- Transaction and error handling
+- Centralized execution auditing
+- Staging-to-current-dimension reconciliation
+- Source profiling before dimensional design
+- Git feature branches, Pull Requests, and Squash & Merge
 
 ---
 
 # Technology Stack
 
 | Category | Technology |
-|-----------|------------|
-| Database | SQL Server |
-| Language | T-SQL |
+|---|---|
+| Database | SQL Server 2022 Developer |
+| Query / ETL Language | T-SQL |
+| Source Dataset | AdventureWorks2022 |
+| Development Environment | Windows 11 + WSL Ubuntu |
+| IDE | Visual Studio Code |
 | Version Control | Git |
 | Repository | GitHub |
-| IDE | Visual Studio Code |
 | Business Intelligence | Power BI *(planned)* |
 
 ---
@@ -102,101 +183,89 @@ This project follows engineering practices commonly adopted in enterprise Data W
 # Repository Structure
 
 ```text
-AdventureWorks-Enterprise-DataWarehouse
+AdventureWorks-Enterprise-DataWarehouse/
 │
 ├── database/
+│   ├── 01_dimensions/
+│   ├── 02_audit/
+│   ├── 03_staging/
+│   └── 04_procedures/
+│
 ├── docs/
+│   ├── architecture/
+│   ├── design/
+│   ├── diagrams/
+│   ├── images/
+│   ├── reference/
+│   └── source/
+│
 ├── powerbi/
 ├── sample-data/
 ├── tests/
 │
+├── CHANGELOG.md
 ├── README.md
 ├── LICENSE
-└── .gitignore
+└── requirements.txt
 ```
 
-## database/
-
-Contains all SQL Server database objects including:
-
-- Database initialization
-- Schemas
-- Dimensions
-- Fact tables
-- Staging tables
-- Stored procedures
-- Seed scripts
-- Views
-- Indexes
-- Security objects
+The repository separates executable database objects from architecture, design, source-analysis, and reference documentation.
 
 ---
 
-## docs/
+# Validation Status
 
-Technical documentation, architecture diagrams and implementation guides.
+Module 4 closure includes global validation across all implemented dimensions.
 
----
+```text
+Current-version uniqueness       : PASS
+Temporal range integrity         : PASS
+Historical overlap validation    : PASS
+Staging ↔ current reconciliation : PASS
+Latest ETL process health        : 10 / 10 Succeeded
+```
 
-## powerbi/
+Current dimensional state:
 
-Power BI semantic model, DAX measures and analytical dashboards.
-
----
-
-## tests/
-
-Data quality validation and integration tests.
-
----
-
-## sample-data/
-
-Sample datasets used for demonstrations and testing.
+| Dimension | Total Versions | Business Keys | Current | Historical |
+|---|---:|---:|---:|---:|
+| `DimCustomer` | 19,820 | 19,820 | 19,820 | 0 |
+| `DimProduct` | 506 | 504 | 504 | 2 |
+| `DimSalesPerson` | 20 | 17 | 17 | 3 |
+| `DimShipMethod` | 8 | 5 | 5 | 3 |
+| `DimTerritory` | 13 | 10 | 10 | 3 |
 
 ---
 
 # Current Progress
 
 | Module | Status |
-|---------|:------:|
-| Repository Foundation | ✅ Completed |
-| Database Foundation | ✅ Completed |
-| Dimension History Management | ✅ Completed |
-| Dimensional Model Expansion | ⏳ Planned |
-| Fact Loading | ⏳ Planned |
-| Incremental Loading | ⏳ Planned |
-| Data Quality & Testing | ⏳ Planned |
-| Performance Optimization | ⏳ Planned |
-| Orchestration & Automation | ⏳ Planned |
-| Power BI Analytics | ⏳ Planned |
-| Production Readiness | ⏳ Planned |
+|---|:---:|
+| M0 — Project Foundation & Environment | ✅ Completed |
+| M1 — Source System Analysis | ✅ Completed |
+| M2 — Dimensional Modeling | ✅ Completed |
+| M3 — Data Warehouse Foundation | ✅ Completed |
+| M4 — Dimensional Model Expansion | ✅ Completed |
+| M5 — Data Quality & Reliability | ⬜ Planned |
+| M6 — Performance & Optimization | ⬜ Planned |
+| M7 — Power BI Analytics | ⬜ Planned |
+| M8 — Production Polish & Project Closure | ⬜ Planned |
+
+The current release milestone is **v1.2.0 — Dimensional Model Expansion**.
 
 ---
 
-# Current Features
+# Documentation
 
-- ✅ Enterprise Data Warehouse architecture
-- ✅ Layered database schema design
-- ✅ Product staging layer
-- ✅ ETL audit framework
-- ✅ Full-load ETL pipeline
-- ✅ RowHash generation
-- ✅ Transaction handling
-- ✅ Error handling
-- ✅ Professional Git workflow
-- ✅ Product SCD Type 2
-- ✅ Type 1 and Type 2 attribute handling
-- ✅ Historical product versioning
-- ✅ Temporal validity management
+Project documentation is maintained alongside the implementation.
 
----
+Key entry points:
 
-# Project Roadmap
-
-<p align="center">
-    <img src="docs/diagrams/project-roadmap.png" width="950">
-</p>
+- [`docs/README.md`](docs/README.md) — documentation map;
+- [`docs/reference/tables-catalog.md`](docs/reference/tables-catalog.md) — current physical table catalog;
+- [`docs/design/dimensions/`](docs/design/dimensions/) — dimension design specifications;
+- [`docs/architecture/`](docs/architecture/) — architecture and engineering standards;
+- [`docs/source/`](docs/source/) — source-system analysis and profiling.
 
 ---
 
