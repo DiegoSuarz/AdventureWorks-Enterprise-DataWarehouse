@@ -8,6 +8,42 @@ The format is inspired by Keep a Changelog and the project follows Semantic Vers
 
 ## [Unreleased]
 
+### Added
+
+- Added `audit.ETLWatermark` to persist composite LOW and HIGH watermark state.
+- Added `etl.LoadShipMethodIncremental` as the end-to-end incremental ShipMethod orchestrator.
+- Added idempotent watermark registration for the ShipMethod incremental process.
+- Added composite watermark extraction using `(ModifiedDate, ShipMethodID)`.
+- Added durable HIGH watermark batch boundaries.
+- Added failed-batch recovery using persisted HIGH boundaries and exact retry semantics.
+- Added watermark-row concurrency protection using `UPDLOCK` and `HOLDLOCK`.
+
+### Changed
+
+- Changed `etl.LoadShipMethodStage` from full-source snapshot extraction to bounded incremental batch extraction.
+- Changed `stg.ShipMethod` semantics from a complete source snapshot to the delta for the current incremental batch.
+- Added explicit initial-load support using a NULL LOW watermark.
+- Added no-change detection so unchanged source state skips downstream staging and dimensional processing.
+- LOW watermark advancement now occurs only after the complete ShipMethod batch succeeds.
+
+### Validated
+
+- Validated composite ordering with multiple source rows sharing the same `ModifiedDate`.
+- Validated the `LOW < row <= HIGH` extraction contract.
+- Validated initial incremental loading from a NULL LOW watermark.
+- Validated true no-op execution when source HIGH equals persisted LOW.
+- Validated controlled pipeline failure with LOW preserved and HIGH retained.
+- Validated exact retry of a failed batch without recapturing HIGH.
+- Validated post-retry no-op behavior.
+- Confirmed `dw.DimShipMethod` remained at 8 total versions, 5 current versions, and 3 historical versions.
+- Confirmed exactly one current `DimShipMethod` version per business key and zero invalid temporal ranges.
+
+### Documentation
+
+- Updated ETL architecture documentation with composite and high watermark patterns.
+- Updated repository documentation for the new watermark control table and incremental ShipMethod pipeline.
+- Updated staging documentation to distinguish snapshot staging from incremental batch staging.
+
 ---
 
 ## [v1.2.0] - 2026-09-16

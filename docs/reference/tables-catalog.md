@@ -38,7 +38,8 @@ AdventureWorks_EDW
 │   └── ShipMethod
 │
 └── audit
-    └── ETLExecutionLog
+    ├── ETLExecutionLog
+    └── ETLWatermark
 ```
 
 Current table count:
@@ -46,10 +47,10 @@ Current table count:
 ```text
 Dimension Tables : 6
 Staging Tables   : 5
-Audit Tables     : 1
+Audit Tables     : 2
 Fact Tables      : 0
 --------------------
-Total Tables     : 12
+Total Tables     : 13
 ```
 
 ---
@@ -842,12 +843,12 @@ Distinct Sales Persons : 17
 
 ### Purpose
 
-Provides the normalized current-state shipping-method snapshot before dimensional processing.
+Provides the normalized shipping-method delta for the current bounded incremental batch.
 
 ### Grain
 
 ```text
-One row = current state of one ShipMethodID
+One row = one ShipMethodID selected by the current LOW/HIGH batch boundary
 ```
 
 ### Source
@@ -873,17 +874,25 @@ Purchasing.ShipMethod
 ```text
 Purchasing.ShipMethod
         ↓
+composite LOW < row <= HIGH
+        ↓
 stg.ShipMethod
         ↓
 dw.DimShipMethod
 ```
 
-### Validated Staging State
+### Incremental Staging Behavior
+
+The table contains only the rows belonging to the current incremental batch.
 
 ```text
-Total Shipping Methods    : 5
-Distinct Shipping Methods : 5
+Initial batch : 5 rows validated
+Delta batch   : 3 rows validated
+No-op batch   : 0 rows validated
 ```
+
+Batch cardinality is intentionally variable and must not be interpreted as a
+complete source snapshot.
 
 ---
 
@@ -947,14 +956,86 @@ The audit layer provides evidence for:
 At Module 4 closure, the latest execution of each implemented ETL process was validated successfully:
 
 ```text
-ETL Processes       : 10
-Healthy Processes   : 10
+ETL Processes       : 11
+Healthy Processes   : 11
 Unhealthy Processes : 0
 ```
 
 ---
 
-# 15. Layer Summary
+## 15. `audit.ETLWatermark`
+
+### Purpose
+
+Persists the durable control state required by incremental ETL processes using
+composite LOW and HIGH watermark boundaries.
+
+### Grain
+
+```text
+One row = one incremental ETL process
+```
+
+### Columns
+
+| Column | Description |
+|---|---|
+| `WatermarkID` | Surrogate identifier for the watermark-control record. |
+| `ProcessName` | Unique incremental process name. |
+| `SourceObject` | Source object monitored by the process. |
+| `LowModifiedDate` | Timestamp component of the last successfully committed LOW position. |
+| `LowBusinessKey` | Business-key component of the last successfully committed LOW position. |
+| `HighModifiedDate` | Timestamp component of the currently frozen HIGH boundary. |
+| `HighBusinessKey` | Business-key component of the currently frozen HIGH boundary. |
+| `Status` | Current process state: `Ready`, `InProgress`, or `Failed`. |
+| `LastSuccessfulExecutionID` | Parent execution that last advanced LOW successfully. |
+| `CurrentExecutionID` | Execution currently owning or last failing the frozen batch. |
+| `CreatedAt` | Watermark-record creation timestamp. |
+| `UpdatedAt` | Timestamp of the latest watermark-state transition. |
+
+### Composite Watermark Contract
+
+```text
+LOW < source row <= HIGH
+```
+
+LOW is exclusive and HIGH is inclusive.
+
+A NULL LOW represents the initial incremental batch.
+
+### Batch State Machine
+
+```text
+Ready
+  ↓ capture HIGH
+InProgress
+  ↓ success
+Ready
+
+InProgress
+  ↓ failure
+Failed
+  ↓ retry same HIGH
+InProgress
+  ↓ success
+Ready
+```
+
+LOW advances only after the complete batch succeeds.
+
+Failed batches retain HIGH so retries process exactly the same source interval.
+
+### Current Pilot
+
+```text
+ProcessName   : etl.LoadShipMethodIncremental
+SourceObject  : AdventureWorks2022.Purchasing.ShipMethod
+Composite Key : (ModifiedDate, ShipMethodID)
+```
+
+---
+
+# 16. Layer Summary
 
 | Schema | Table | Type | Purpose |
 |---|---|---|---|
@@ -968,12 +1049,13 @@ Unhealthy Processes : 0
 | `stg` | `Customer` | Staging | Customer source snapshot |
 | `stg` | `Territory` | Staging | Territory source snapshot |
 | `stg` | `SalesPerson` | Staging | Consolidated sales-person source snapshot |
-| `stg` | `ShipMethod` | Staging | Shipping-method source snapshot |
+| `stg` | `ShipMethod` | Staging | Current incremental shipping-method batch delta |
 | `audit` | `ETLExecutionLog` | Audit | ETL observability and execution tracking |
+| `audit` | `ETLWatermark` | Audit / Control | Persisted incremental watermark state |
 
 ---
 
-# 16. Current Architecture
+# 17. Current Architecture
 
 ```text
 AdventureWorks2022
@@ -1010,12 +1092,13 @@ AdventureWorks2022
 │      Audit Layer       │
 │                        │
 │ audit.ETLExecutionLog  │
+│ audit.ETLWatermark     │
 └────────────────────────┘
 ```
 
 ---
 
-# 17. Planned Tables
+# 18. Planned Tables
 
 The next major warehouse table planned after the dimensional-model expansion is:
 
@@ -1023,7 +1106,7 @@ The next major warehouse table planned after the dimensional-model expansion is:
 dw.FactSales
 ```
 
-Fact-table implementation belongs to the next project module and is not part of release `v1.2.0`.
+Fact-table implementation remains future warehouse scope and is not part of Module 5.
 
 ---
 
@@ -1032,7 +1115,7 @@ Fact-table implementation belongs to the next project module and is not part of 
 ```text
 Catalog: Active
 Database: AdventureWorks_EDW
-Current Stable Release: v1.1.0
-Target Release: v1.2.0
-Current Module: Module 4 — Dimensional Model Expansion
+Current Stable Release: v1.2.0
+Current Module: Module 5 — Composite + High Watermark Incremental Loading
+Next Module: Module 6 — Data Quality & ETL Reliability
 ```

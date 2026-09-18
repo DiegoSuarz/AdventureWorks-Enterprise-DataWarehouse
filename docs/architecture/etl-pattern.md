@@ -94,7 +94,7 @@ Responsibilities:
 Responsibilities:
 
 - Temporary landing zone
-- Current source snapshot
+- Current source snapshot or bounded incremental batch delta
 - Data normalization
 - RowHash generation
 - SourceModifiedDate preservation
@@ -124,6 +124,7 @@ Responsibilities:
 - Performance metrics
 - Error logging
 - Operational monitoring
+- Persisted incremental-control state
 
 ---
 
@@ -317,9 +318,193 @@ Every staging object should preserve the latest meaningful source modification t
 This enables:
 
 - incremental loading;
-- future watermark loading;
-- CDC integration;
+- watermark-based extraction;
+- future CDC integration;
 - troubleshooting.
+
+### 11.1 Composite Watermark Standard
+
+The implemented incremental pilot uses a deterministic composite source
+position:
+
+```text
+(ModifiedDate, BusinessKey)
+```
+
+A timestamp alone is insufficient when multiple rows share the same
+`ModifiedDate`. The business-key component provides deterministic ordering.
+
+The extraction contract is:
+
+```text
+LOW < source row <= HIGH
+```
+
+Where:
+
+```text
+LOW  = last successfully committed source position
+HIGH = frozen upper boundary for the current batch
+```
+
+LOW is exclusive and HIGH is inclusive.
+
+A NULL LOW represents the initial incremental batch.
+
+### 11.2 High Watermark Batch Control
+
+A new batch begins by capturing the maximum composite source position and
+persisting it as HIGH.
+
+```text
+Ready
+  ↓
+capture source HIGH
+  ↓
+persist HIGH
+  ↓
+InProgress
+  ↓
+process staging + warehouse
+```
+
+HIGH is frozen before downstream processing begins so the batch scope remains
+stable even if the source changes while processing is running.
+
+LOW advances only after the complete batch succeeds.
+
+```text
+successful batch
+
+LOW = previous HIGH
+HIGH = NULL
+Status = Ready
+```
+
+### 11.3 Failure and Retry Contract
+
+If processing fails after HIGH has been persisted:
+
+```text
+LOW    = unchanged
+HIGH   = retained
+Status = Failed
+```
+
+A retry must reuse the persisted HIGH.
+
+It must not capture a newer source HIGH because doing so would change the
+boundaries of the failed batch.
+
+```text
+Failed
+  ↓
+reuse persisted HIGH
+  ↓
+InProgress
+  ↓
+retry exact batch
+  ↓
+Ready
+```
+
+This provides deterministic batch restartability.
+
+### 11.4 No-Change Execution
+
+If the current source maximum is not greater than LOW, there is no new
+incremental batch.
+
+The process:
+
+```text
+detects no change
+      ↓
+clears incremental staging
+      ↓
+skips downstream dimension processing
+      ↓
+records a successful no-op execution
+```
+
+A no-op does not advance `LastSuccessfulExecutionID` because no watermark
+progress was committed.
+
+### 11.5 Concurrency Control
+
+Watermark acquisition uses serialized access to the watermark control record through:
+
+```text
+UPDLOCK
+HOLDLOCK
+```
+
+The lock is held only while reading and transitioning the watermark state.
+
+Long-running staging and dimensional processing do not retain the watermark
+transaction lock.
+
+A concurrent execution that encounters:
+
+```text
+Status = InProgress
+```
+
+is rejected rather than processing the same batch simultaneously.
+
+### 11.6 Multi-Source Incremental Loads
+
+A single composite watermark is appropriate when one ordered source stream
+fully represents the relevant changes for an analytical entity.
+
+For entities composed from multiple independent source tables, one universal
+watermark should not be assumed.
+
+The preferred pattern is:
+
+```text
+source-specific change detection
+            ↓
+derive affected business keys
+            ↓
+rebuild complete analytical entity
+            ↓
+load staging
+            ↓
+process warehouse changes
+```
+
+Each independently changing source may require its own incremental position.
+
+### 11.7 Delete Limitation
+
+A conventional `ModifiedDate` watermark detects source rows that still exist
+and whose modification position moves forward.
+
+It does not detect a physical source-row deletion because the deleted row is no
+longer available to expose a `ModifiedDate`.
+
+Hard-delete detection requires a separate mechanism such as:
+
+```text
+CDC
+Change Tracking
+soft-delete indicators
+source audit tables
+periodic reconciliation
+snapshot comparison
+```
+
+### 11.8 Recovery Limitation
+
+The current SQL error path converts a failed active batch from `InProgress` to
+`Failed` and preserves its HIGH boundary.
+
+An abrupt session or process termination that bypasses SQL error handling may
+leave a watermark in `InProgress`.
+
+Automated stale-execution detection or lease-based recovery is outside Module 5
+and belongs to future ETL reliability work.
 
 ---
 
@@ -344,6 +529,7 @@ Stored procedures:
 ```text
 etl.Load<Product>Stage
 etl.LoadDim<Product>
+etl.Load<Product>Incremental
 etl.LoadFact<FactName>
 ```
 
@@ -354,6 +540,7 @@ etl.LoadProductStage
 etl.LoadDimProduct
 etl.LoadCustomerStage
 etl.LoadDimCustomer
+etl.LoadShipMethodIncremental
 ```
 
 ---
@@ -375,23 +562,23 @@ Full Load
 
 ↓
 
-Watermark
+Composite + High Watermark Incremental Loading
 
 ↓
 
-CDC
+Data Quality & ETL Reliability
 
 ↓
 
-Azure Data Factory
+Performance & Optimization
 
 ↓
 
-Apache Airflow
+Power BI Analytics
 
 ↓
 
-Microsoft Fabric Pipelines
+Production Polish
 ```
 
 The ETL standard remains unchanged regardless of orchestration technology.
@@ -407,7 +594,9 @@ The ETL standard remains unchanged regardless of orchestration technology.
 5. Warehouse integrity takes priority over ETL completion.
 6. Business rules belong in the warehouse layer.
 7. Every warehouse object must have a deterministic loading process.
-8. Future cloud orchestration must reuse the same logical pattern.
+8. Incremental LOW advances only after complete batch success.
+9. Failed batches must retain deterministic retry boundaries.
+10. Incremental source suitability must be validated before implementation.
 
 ---
 
@@ -437,7 +626,8 @@ docs/design/dimensions/
 
 ```text
 Architecture: Approved
-Current Pattern: Full Load
-Future Pattern: Incremental + CDC
-Current Release: v1.1.0
+Current Pattern: Full Load + Composite/High Watermark Incremental Pilot
+Current Stable Release: v1.2.0
+Current Module: Module 5 — Composite + High Watermark Incremental Loading
+Next Module: Module 6 — Data Quality & ETL Reliability
 ```
