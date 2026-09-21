@@ -49,19 +49,23 @@ The grain answers:
 
 > What does one row in this fact table represent?
 
-For the planned `dw.FactSales` table:
+For the active `dw.FactSales` design:
 
 ```text
-One row = one sales order line
+One row = one sales order detail line
 ```
 
-The source grain corresponds primarily to:
+The source grain corresponds to:
 
 ```text
 AdventureWorks2022.Sales.SalesOrderDetail
 ```
 
-Each fact row will reference the dimensional context applicable to that transaction.
+The source transaction is identified by the composite key `SalesOrderID + SalesOrderDetailID`.
+
+`Sales.SalesOrderHeader` supplies the order-level dimensional and lifecycle context associated with each detail line.
+
+The current AdventureWorks2022 snapshot contains only orders with `Status = 5` (Shipped), but the fact grain is defined by the sales order detail transaction rather than by the current status distribution.
 
 ---
 
