@@ -49,7 +49,7 @@ The project is developed as an engineering system rather than a collection of is
 - validation and reconciliation;
 - version-controlled database development.
 
-The current physical model contains **6 dimensions, 5 staging tables, 10 ETL procedures, and a centralized ETL audit table**.
+The current physical model contains **6 dimensions, 5 staging tables, 11 ETL procedures, and 2 audit/control tables**.
 
 ---
 
@@ -96,6 +96,7 @@ AdventureWorks2022
 │      Audit Layer       │
 │                        │
 │ audit.ETLExecutionLog  │
+│ audit.ETLWatermark     │
 └────────────────────────┘
 
 Future analytical layers
@@ -108,10 +109,10 @@ The warehouse uses four principal schemas:
 
 | Schema | Responsibility |
 |---|---|
-| `stg` | Normalized current-state source snapshots |
+| `stg` | Normalized source snapshots or bounded incremental batch deltas |
 | `dw` | Analytical dimensional objects |
 | `etl` | Stored procedures that move and transform data |
-| `audit` | Operational ETL execution history |
+| `audit` | ETL execution history and persisted incremental-control state |
 
 ---
 
@@ -132,17 +133,19 @@ Controlled SCD validation has intentionally produced historical versions in Prod
 
 ## Staging
 
-Current staging snapshots:
+Current staging behavior:
 
 ```text
-stg.Product       : 504 rows
-stg.Customer      : 19,820 rows
-stg.Territory     : 10 rows
-stg.SalesPerson   : 17 rows
-stg.ShipMethod    : 5 rows
+stg.Product       : current source snapshot
+stg.Customer      : current source snapshot
+stg.Territory     : current source snapshot
+stg.SalesPerson   : current source snapshot
+stg.ShipMethod    : current incremental batch delta
 ```
 
-Staging stores current source state only. Historical dimensional versions are maintained in the `dw` layer.
+Snapshot staging objects hold normalized current source state. `stg.ShipMethod`
+holds only the rows selected for the current composite-watermark batch.
+Historical dimensional versions remain exclusively in the `dw` layer.
 
 ---
 
@@ -157,6 +160,10 @@ Staging stores current source state only. Historical dimensional versions are ma
 - Filtered unique indexes for one current version per business key
 - Protection of simultaneous Type 1 + Type 2 changes
 - Idempotent ETL behavior
+- Composite `(ModifiedDate, BusinessKey)` incremental watermarks
+- Persisted HIGH watermark batch boundaries
+- No-change batch detection
+- Retryable failed batches with exact HIGH-boundary reuse
 - Transaction and error handling
 - Centralized execution auditing
 - Staging-to-current-dimension reconciliation
@@ -186,10 +193,12 @@ Staging stores current source state only. Historical dimensional versions are ma
 AdventureWorks-Enterprise-DataWarehouse/
 │
 ├── database/
+│   ├── 00_initialization/
 │   ├── 01_dimensions/
-│   ├── 02_audit/
 │   ├── 03_staging/
-│   └── 04_procedures/
+│   ├── 04_procedures/
+│   ├── 05_seed/
+│   └── audit/
 │
 ├── docs/
 │   ├── architecture/
@@ -215,14 +224,18 @@ The repository separates executable database objects from architecture, design, 
 
 # Validation Status
 
-Module 4 closure includes global validation across all implemented dimensions.
+Module 5 closure includes dimensional integrity validation together with
+the ShipMethod incremental-loading pilot.
 
 ```text
 Current-version uniqueness       : PASS
 Temporal range integrity         : PASS
 Historical overlap validation    : PASS
-Staging ↔ current reconciliation : PASS
-Latest ETL process health        : 10 / 10 Succeeded
+Composite watermark ordering     : PASS
+HIGH watermark persistence       : PASS
+Failure + exact retry            : PASS
+Post-retry no-op                 : PASS
+Latest ETL process health        : 11 / 11 Succeeded
 ```
 
 Current dimensional state:
@@ -246,12 +259,14 @@ Current dimensional state:
 | M2 — Dimensional Modeling | ✅ Completed |
 | M3 — Data Warehouse Foundation | ✅ Completed |
 | M4 — Dimensional Model Expansion | ✅ Completed |
-| M5 — Data Quality & Reliability | ⬜ Planned |
-| M6 — Performance & Optimization | ⬜ Planned |
-| M7 — Power BI Analytics | ⬜ Planned |
-| M8 — Production Polish & Project Closure | ⬜ Planned |
+| M5 — Composite + High Watermark Incremental Loading | ✅ Completed |
+| M6 — Data Quality & ETL Reliability | ⬜ Planned |
+| M7 — Performance & Optimization | ⬜ Planned |
+| M8 — Power BI Analytics | ⬜ Planned |
+| M9 — Production Polish & Project Closure | ⬜ Planned |
 
-The current release milestone is **v1.2.0 — Dimensional Model Expansion**.
+The latest stable release is **v1.2.0 — Dimensional Model Expansion**.
+Module 5 is complete on the current feature branch and is pending merge and release preparation.
 
 ---
 

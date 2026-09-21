@@ -116,10 +116,10 @@ The table catalog documents the current physical warehouse model, including:
 ```text
 6 Dimension Tables
 5 Staging Tables
-1 Audit Table
+2 Audit Tables
 0 Fact Tables
 -----------------
-12 Total Tables
+13 Total Tables
 ```
 
 ---
@@ -153,17 +153,24 @@ stg.SalesPerson
 stg.ShipMethod
 ```
 
-Operational ETL execution is recorded through:
+Operational ETL control is implemented through:
 
 ```text
 audit.ETLExecutionLog
+audit.ETLWatermark
 ```
 
-The next major warehouse object planned after the dimensional-model expansion is:
+`audit.ETLExecutionLog` stores execution history, while
+`audit.ETLWatermark` stores the durable control state used by incremental
+watermark-driven processes.
+
+The next engineering module after incremental loading is:
 
 ```text
-dw.FactSales
+M6 — Data Quality & ETL Reliability
 ```
+
+Fact-table implementation remains part of future warehouse scope.
 
 ---
 
@@ -200,8 +207,9 @@ Architecture Documentation : Active
 Dimension Specifications   : 6 implemented
 Source Documentation        : Active
 Reference Catalog           : Active
-Target Release              : v1.2.0
-Current Module              : Module 4 — Dimensional Model Expansion
+Current Stable Release      : v1.2.0
+Current Module              : Module 5 — Composite + High Watermark Incremental Loading
+Next Module                 : Module 6 — Data Quality & ETL Reliability
 ```
 
 Documentation evolves together with the implementation and is considered part of the project deliverables.

@@ -5,8 +5,8 @@ Database : AdventureWorks_EDW
 Object   : etl.LoadShipMethodStage
 Script   : etl.LoadShipMethodStage.sql
 Author   : Diego Suárez
-Purpose  : Loads the normalized current-state representation of AdventureWorks
-           shipping methods into stg.ShipMethod.
+Purpose  : Loads the incremental ShipMethod batch defined by composite LOW and
+           HIGH watermark boundaries into stg.ShipMethod.
 ===============================================================================
 */
 
@@ -20,24 +20,84 @@ GO
 */
 
 CREATE OR ALTER PROCEDURE etl.LoadShipMethodStage
+    @LowModifiedDate DATETIME2(7) = NULL,
+    @LowBusinessKey BIGINT = NULL,
+    @HighModifiedDate DATETIME2(7),
+    @HighBusinessKey BIGINT
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    -----------------------------------------------------------------------
-    -- Execution Variables
-    -----------------------------------------------------------------------
-    DECLARE @executionId BIGINT = NULL;
-    DECLARE @rowsRead BIGINT = 0;
-    DECLARE @rowsInserted BIGINT = 0;
-    DECLARE @errorMessage NVARCHAR(4000);
+    ---------------------------------------------------------------------------
+    -- Execution variables
+    ---------------------------------------------------------------------------
+    DECLARE @ExecutionID BIGINT = NULL;
+
+    DECLARE @RowsRead BIGINT = 0;
+    DECLARE @RowsInserted BIGINT = 0;
+
+    DECLARE @ErrorMessage NVARCHAR(4000);
+
+    /*
+    ===========================================================================
+    2. VALIDATE WATERMARK BOUNDARIES
+    ===========================================================================
+    */
+
+    IF
+    (
+        (
+            @LowModifiedDate IS NULL
+            AND @LowBusinessKey IS NOT NULL
+        )
+        OR
+        (
+            @LowModifiedDate IS NOT NULL
+            AND @LowBusinessKey IS NULL
+        )
+    )
+    BEGIN
+        THROW 50001,
+            'LOW watermark components must both be NULL or both be NOT NULL.',
+            1;
+    END;
+
+    IF
+    (
+        @HighModifiedDate IS NULL
+        OR @HighBusinessKey IS NULL
+    )
+    BEGIN
+        THROW 50002,
+            'HIGH watermark components must both be NOT NULL.',
+            1;
+    END;
+
+    IF
+    (
+        @LowModifiedDate IS NOT NULL
+        AND NOT
+        (
+            @HighModifiedDate > @LowModifiedDate
+            OR
+            (
+                @HighModifiedDate = @LowModifiedDate
+                AND @HighBusinessKey > @LowBusinessKey
+            )
+        )
+    )
+    BEGIN
+        THROW 50003,
+            'HIGH watermark must be strictly greater than LOW watermark.',
+            1;
+    END;
 
     BEGIN TRY
 
         /*
         =======================================================================
-        2. REGISTER ETL EXECUTION
+        3. REGISTER ETL EXECUTION
         =======================================================================
         */
 
@@ -56,28 +116,48 @@ BEGIN
             SUSER_SNAME()
         );
 
-        SET @executionId =
+        SET @ExecutionID =
             CONVERT
             (
                 BIGINT,
                 SCOPE_IDENTITY()
             );
 
-
         /*
         =======================================================================
-        3. CAPTURE SOURCE ROW COUNT
+        4. CAPTURE INCREMENTAL SOURCE ROW COUNT
         =======================================================================
         */
 
         SELECT
-            @rowsRead = COUNT_BIG(*)
-        FROM AdventureWorks2022.Purchasing.ShipMethod;
+            @RowsRead = COUNT_BIG(*)
+        FROM AdventureWorks2022.Purchasing.ShipMethod AS sm
+        WHERE
+        (
+            @LowModifiedDate IS NULL
 
+            OR sm.ModifiedDate > @LowModifiedDate
+
+            OR
+            (
+                sm.ModifiedDate = @LowModifiedDate
+                AND sm.ShipMethodID > @LowBusinessKey
+            )
+        )
+        AND
+        (
+            sm.ModifiedDate < @HighModifiedDate
+
+            OR
+            (
+                sm.ModifiedDate = @HighModifiedDate
+                AND sm.ShipMethodID <= @HighBusinessKey
+            )
+        );
 
         /*
         =======================================================================
-        4. START STAGING LOAD
+        5. START INCREMENTAL STAGING LOAD
         =======================================================================
         */
 
@@ -85,10 +165,9 @@ BEGIN
 
         TRUNCATE TABLE stg.ShipMethod;
 
-
         /*
         =======================================================================
-        5. LOAD SHIPMETHOD SNAPSHOT
+        6. LOAD INCREMENTAL SHIPMETHOD BATCH
         =======================================================================
         */
 
@@ -106,7 +185,7 @@ BEGIN
             sm.ShipMethodID,
 
             -------------------------------------------------------------------
-            -- Descriptive Attributes
+            -- Descriptive attributes
             -------------------------------------------------------------------
             NULLIF
             (
@@ -115,7 +194,7 @@ BEGIN
             ) AS ShipMethodName,
 
             -------------------------------------------------------------------
-            -- Tariff Attributes
+            -- Tariff attributes
             -------------------------------------------------------------------
             CONVERT
             (
@@ -130,7 +209,7 @@ BEGIN
             ) AS ShipRate,
 
             -------------------------------------------------------------------
-            -- Source Metadata
+            -- Source metadata
             -------------------------------------------------------------------
             CONVERT
             (
@@ -141,7 +220,7 @@ BEGIN
             SYSUTCDATETIME() AS ExtractedAt,
 
             -------------------------------------------------------------------
-            -- SCD Type 2 Change Detection
+            -- SCD Type 2 change detection
             -------------------------------------------------------------------
             HASHBYTES
             (
@@ -172,23 +251,43 @@ BEGIN
                 )
             ) AS RowHash
 
-        FROM AdventureWorks2022.Purchasing.ShipMethod AS sm;
+        FROM AdventureWorks2022.Purchasing.ShipMethod AS sm
+        WHERE
+        (
+            @LowModifiedDate IS NULL
 
-        SET @rowsInserted = @@ROWCOUNT;
+            OR sm.ModifiedDate > @LowModifiedDate
 
+            OR
+            (
+                sm.ModifiedDate = @LowModifiedDate
+                AND sm.ShipMethodID > @LowBusinessKey
+            )
+        )
+        AND
+        (
+            sm.ModifiedDate < @HighModifiedDate
+
+            OR
+            (
+                sm.ModifiedDate = @HighModifiedDate
+                AND sm.ShipMethodID <= @HighBusinessKey
+            )
+        );
+
+        SET @RowsInserted = @@ROWCOUNT;
 
         /*
         =======================================================================
-        6. COMMIT STAGING LOAD
+        7. COMMIT INCREMENTAL STAGING LOAD
         =======================================================================
         */
 
         COMMIT TRANSACTION;
 
-
         /*
         =======================================================================
-        7. MARK EXECUTION AS SUCCESSFUL
+        8. MARK EXECUTION AS SUCCESSFUL
         =======================================================================
         */
 
@@ -196,12 +295,12 @@ BEGIN
         SET
             EndTime = SYSUTCDATETIME(),
             [Status] = N'Succeeded',
-            RowsRead = @rowsRead,
-            RowsInserted = @rowsInserted,
+            RowsRead = @RowsRead,
+            RowsInserted = @RowsInserted,
             RowsUpdated = 0,
             RowsRejected = 0,
             ErrorMessage = NULL
-        WHERE ExecutionID = @executionId;
+        WHERE ExecutionID = @ExecutionID;
 
     END TRY
 
@@ -209,7 +308,7 @@ BEGIN
 
         /*
         =======================================================================
-        8. ROLLBACK FAILED LOAD
+        9. ROLLBACK FAILED LOAD
         =======================================================================
         */
 
@@ -218,14 +317,13 @@ BEGIN
             ROLLBACK TRANSACTION;
         END;
 
-
         /*
         =======================================================================
-        9. BUILD ERROR MESSAGE
+        10. BUILD ERROR MESSAGE
         =======================================================================
         */
 
-        SET @errorMessage =
+        SET @ErrorMessage =
             CONCAT
             (
                 N'ErrorNumber: ',
@@ -245,30 +343,29 @@ BEGIN
                 ERROR_MESSAGE()
             );
 
-
         /*
         =======================================================================
-        10. MARK EXECUTION AS FAILED
+        11. MARK EXECUTION AS FAILED
         =======================================================================
         */
 
-        IF @executionId IS NOT NULL
+        IF @ExecutionID IS NOT NULL
         BEGIN
             UPDATE audit.ETLExecutionLog
             SET
                 EndTime = SYSUTCDATETIME(),
                 [Status] = N'Failed',
-                RowsRead = @rowsRead,
+                RowsRead = @RowsRead,
                 RowsInserted = 0,
                 RowsUpdated = 0,
                 RowsRejected = 0,
                 ErrorMessage =
                     LEFT
                     (
-                        @errorMessage,
+                        @ErrorMessage,
                         4000
                     )
-            WHERE ExecutionID = @executionId;
+            WHERE ExecutionID = @ExecutionID;
         END;
 
         THROW;
@@ -277,10 +374,9 @@ BEGIN
 END;
 GO
 
-
 /*
 ===============================================================================
-11. VALIDATE PROCEDURE CREATION
+12. VALIDATE PROCEDURE CREATION
 ===============================================================================
 */
 
