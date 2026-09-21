@@ -260,13 +260,12 @@ Current dimensional state:
 | M3 — Data Warehouse Foundation | ✅ Completed |
 | M4 — Dimensional Model Expansion | ✅ Completed |
 | M5 — Composite + High Watermark Incremental Loading | ✅ Completed |
-| M6 — Data Quality & ETL Reliability | 🟡 Current |
-| M7 — Performance & Optimization | ⬜ Planned |
-| M8 — Power BI Analytics | ⬜ Planned |
-| M9 — Production Polish & Project Closure | ⬜ Planned |
+| M6 — FactSales & Star Schema Completion | 🟡 Current |
+| M7 — Power BI Analytics | ⬜ Planned |
+| M8 — Production Hardening & Project Closure | ⬜ Planned |
 
 The latest stable release is **v1.3.0 — Composite + High Watermark Incremental Loading**.
-The current engineering focus is **M6 — Data Quality & ETL Reliability**.
+The current engineering focus is **M6 — FactSales & Star Schema Completion**.
 
 ---
 

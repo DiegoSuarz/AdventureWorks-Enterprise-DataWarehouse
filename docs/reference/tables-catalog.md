@@ -1100,13 +1100,14 @@ AdventureWorks2022
 
 # 18. Planned Tables
 
-The next major warehouse table planned after the dimensional-model expansion is:
+The active warehouse expansion target for Module 6 is:
 
 ```text
 dw.FactSales
 ```
 
-Fact-table implementation remains future warehouse scope and is not part of Module 5.
+The implementation of `dw.FactSales` is the primary warehouse deliverable
+of Module 6 and will complete the analytical star schema.
 
 ---
 
@@ -1116,6 +1117,7 @@ Fact-table implementation remains future warehouse scope and is not part of Modu
 Catalog: Active
 Database: AdventureWorks_EDW
 Current Stable Release: v1.3.0
-Current Module: Module 6 — Data Quality & ETL Reliability
-Next Module: Module 7 — Performance & Optimization
+Current Module: Module 6 — FactSales & Star Schema Completion
+Next Module: Module 7 — Power BI Analytics
+Final Module: Module 8 — Production Hardening & Project Closure
 ```

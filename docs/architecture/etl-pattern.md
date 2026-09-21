@@ -504,7 +504,7 @@ An abrupt session or process termination that bypasses SQL error handling may
 leave a watermark in `InProgress`.
 
 Automated stale-execution detection or lease-based recovery is outside Module 5
-and belongs to future ETL reliability work.
+and is deferred to Module 8 production hardening.
 
 ---
 
@@ -566,11 +566,7 @@ Composite + High Watermark Incremental Loading
 
 ↓
 
-Data Quality & ETL Reliability
-
-↓
-
-Performance & Optimization
+FactSales & Star Schema Completion
 
 ↓
 
@@ -578,7 +574,7 @@ Power BI Analytics
 
 ↓
 
-Production Polish
+Production Hardening & Project Closure
 ```
 
 The ETL standard remains unchanged regardless of orchestration technology.
@@ -628,6 +624,7 @@ docs/design/dimensions/
 Architecture: Approved
 Current Pattern: Full Load + Composite/High Watermark Incremental Loading
 Current Stable Release: v1.3.0
-Current Module: Module 6 — Data Quality & ETL Reliability
-Next Module: Module 7 — Performance & Optimization
+Current Module: Module 6 — FactSales & Star Schema Completion
+Next Module: Module 7 — Power BI Analytics
+Final Module: Module 8 — Production Hardening & Project Closure
 ```

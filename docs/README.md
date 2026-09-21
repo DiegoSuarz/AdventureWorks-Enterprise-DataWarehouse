@@ -167,10 +167,11 @@ watermark-driven processes.
 The current engineering focus is:
 
 ```text
-M6 — Data Quality & ETL Reliability
+M6 — FactSales & Star Schema Completion
 ```
 
-Fact-table implementation remains part of future warehouse scope.
+The active warehouse expansion target is `dw.FactSales`. Module 6 completes the
+analytical star schema before the Power BI layer is built.
 
 ---
 
@@ -208,8 +209,9 @@ Dimension Specifications   : 6 implemented
 Source Documentation        : Active
 Reference Catalog           : Active
 Current Stable Release      : v1.3.0
-Current Module              : Module 6 — Data Quality & ETL Reliability
-Next Module                 : Module 7 — Performance & Optimization
+Current Module              : Module 6 — FactSales & Star Schema Completion
+Next Module                 : Module 7 — Power BI Analytics
+Final Module                : Module 8 — Production Hardening & Project Closure
 ```
 
 Documentation evolves together with the implementation and is considered part of the project deliverables.
