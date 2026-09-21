@@ -8,6 +8,10 @@ The format is inspired by Keep a Changelog and the project follows Semantic Vers
 
 ## [Unreleased]
 
+---
+
+## [v1.3.0] - 2026-09-21
+
 ### Added
 
 - Added `audit.ETLWatermark` to persist composite LOW and HIGH watermark state.

@@ -626,8 +626,8 @@ docs/design/dimensions/
 
 ```text
 Architecture: Approved
-Current Pattern: Full Load + Composite/High Watermark Incremental Pilot
-Current Stable Release: v1.2.0
-Current Module: Module 5 — Composite + High Watermark Incremental Loading
-Next Module: Module 6 — Data Quality & ETL Reliability
+Current Pattern: Full Load + Composite/High Watermark Incremental Loading
+Current Stable Release: v1.3.0
+Current Module: Module 6 — Data Quality & ETL Reliability
+Next Module: Module 7 — Performance & Optimization
 ```
