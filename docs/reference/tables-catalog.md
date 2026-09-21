@@ -1115,7 +1115,7 @@ Fact-table implementation remains future warehouse scope and is not part of Modu
 ```text
 Catalog: Active
 Database: AdventureWorks_EDW
-Current Stable Release: v1.2.0
-Current Module: Module 5 — Composite + High Watermark Incremental Loading
-Next Module: Module 6 — Data Quality & ETL Reliability
+Current Stable Release: v1.3.0
+Current Module: Module 6 — Data Quality & ETL Reliability
+Next Module: Module 7 — Performance & Optimization
 ```
