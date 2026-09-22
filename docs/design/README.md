@@ -34,11 +34,11 @@ Future dimensions include:
 
 ---
 
-## Future Fact Tables
+## Fact Tables
 
-```text
-fact-sales.md
-```
+| Document | Status |
+|----------|--------|
+| `fact-sales.md` | Logical Design |
 
 Additional fact tables may be added as the project evolves.
 
