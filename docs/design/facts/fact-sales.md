@@ -18,9 +18,9 @@ The design must support:
 - order-level drill-through and source reconciliation;
 - additive sales measures suitable for analytical tools such as Power BI.
 
-This document defines the logical design only.
+This document defines the logical and physical design of `dw.FactSales`.
 
-Physical data types, constraints, indexes, primary-key strategy, and storage implementation are deferred to the physical design phase.
+The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, historical lookup semantics, and incremental loading remain deferred to subsequent phases.
 
 ---
 
@@ -206,7 +206,9 @@ Business meaning:
 
 `ShipDate` is nullable in the source schema even though the current snapshot contains no NULL values.
 
-The physical representation of an unavailable ship date is deferred to surrogate-key resolution design.
+An unavailable ship date is physically represented by `NULL` in `ShipDateKey`.
+
+This preserves the distinction between a shipment date that has not occurred and a date dimension member that cannot be resolved.
 
 ---
 
@@ -244,9 +246,9 @@ Together:
 
 `(SalesOrderID, SalesOrderDetailID)`
 
-represent the validated source grain.
+represent the validated source grain and form the physical clustered primary key of `dw.FactSales`.
 
-Their eventual role in the physical primary-key or uniqueness strategy is deferred to physical design.
+No separate `FactSalesKey` surrogate key is introduced because the source grain already provides a stable and deterministic row identity.
 
 ### 7.3 SalesOrderNumber
 
@@ -475,6 +477,105 @@ The logical `dw.FactSales` design consists of the following columns:
 
 The logical column set intentionally separates dimensional context, transaction identifiers, transaction attributes, and analytical measures.
 
+### 10.1 Physical Column Specification
+
+The physical implementation of `dw.FactSales` contains 19 columns.
+
+| Column | Data Type | Nullability | Physical Role |
+|---|---|---|---|
+| `OrderDateKey` | `INT` | `NOT NULL` | Role-playing FK to `dw.DimDate` |
+| `DueDateKey` | `INT` | `NOT NULL` | Role-playing FK to `dw.DimDate` |
+| `ShipDateKey` | `INT` | `NULL` | Role-playing FK to `dw.DimDate`; NULL when shipment has not occurred |
+| `ProductKey` | `BIGINT` | `NOT NULL` | FK to `dw.DimProduct` |
+| `CustomerKey` | `BIGINT` | `NOT NULL` | FK to `dw.DimCustomer` |
+| `TerritoryKey` | `BIGINT` | `NOT NULL` | FK to `dw.DimTerritory` |
+| `SalesPersonKey` | `BIGINT` | `NOT NULL` | FK to `dw.DimSalesPerson` |
+| `ShipMethodKey` | `BIGINT` | `NOT NULL` | FK to `dw.DimShipMethod` |
+| `SalesOrderID` | `INT` | `NOT NULL` | Degenerate identifier and first clustered PK column |
+| `SalesOrderDetailID` | `INT` | `NOT NULL` | Degenerate identifier and second clustered PK column |
+| `SalesOrderNumber` | `NVARCHAR(25)` | `NOT NULL` | Degenerate business identifier |
+| `OrderStatusCode` | `TINYINT` | `NOT NULL` | Transaction status code |
+| `IsOnlineOrder` | `BIT` | `NOT NULL` | Sales channel flag |
+| `OrderQuantity` | `SMALLINT` | `NOT NULL` | Additive quantity measure |
+| `UnitPrice` | `DECIMAL(19,4)` | `NOT NULL` | Non-additive transaction price |
+| `DiscountRate` | `DECIMAL(10,4)` | `NOT NULL` | Non-additive discount rate |
+| `GrossAmount` | `DECIMAL(19,4)` | `NOT NULL` | Additive derived measure |
+| `DiscountAmount` | `DECIMAL(19,4)` | `NOT NULL` | Additive derived measure |
+| `NetSalesAmount` | `DECIMAL(19,4)` | `NOT NULL` | Additive derived measure |
+
+The date surrogate keys use `INT` to match `dw.DimDate.DateKey`.
+
+The non-date surrogate keys use `BIGINT` to match the physical surrogate-key types of their corresponding conformed dimensions.
+
+`SalesOrderNumber` uses `NVARCHAR(25)`, preserving the source character capacity represented by a maximum storage length of 50 bytes.
+
+Monetary values use `DECIMAL(19,4)` rather than the source `money` type to maintain explicit precision and scale in the warehouse.
+
+---
+
+
+### 10.2 Primary Key and Row Identity
+
+`dw.FactSales` does not use a separate surrogate fact key.
+
+The physical row identity is:
+
+`(SalesOrderID, SalesOrderDetailID)`
+
+implemented as:
+
+`PRIMARY KEY CLUSTERED (SalesOrderID, SalesOrderDetailID)`
+
+This primary key:
+
+- enforces the validated sales-order-line grain;
+- prevents duplicate fact rows;
+- supports deterministic source reconciliation;
+- protects ETL idempotence at the source grain;
+- avoids introducing a redundant `FactSalesKey`.
+
+### 10.3 Domain Constraints
+
+The physical table implements seven `CHECK` constraints.
+
+| Constraint | Rule |
+|---|---|
+| `CK_FactSales_OrderStatusCode` | `OrderStatusCode BETWEEN 1 AND 6` |
+| `CK_FactSales_OrderQuantity` | `OrderQuantity > 0` |
+| `CK_FactSales_UnitPrice` | `UnitPrice >= 0` |
+| `CK_FactSales_DiscountRate` | `DiscountRate BETWEEN 0 AND 1` |
+| `CK_FactSales_GrossAmount` | `GrossAmount >= 0` |
+| `CK_FactSales_DiscountAmount` | `DiscountAmount >= 0 AND DiscountAmount <= GrossAmount` |
+| `CK_FactSales_NetSalesAmount` | `NetSalesAmount >= 0 AND NetSalesAmount <= GrossAmount` |
+
+These constraints protect stable domain invariants without encoding observations that are only true for the current source snapshot.
+
+Exact measure-formula equality is intentionally not implemented as a database constraint because rounding and numeric precision are better validated in the ETL and reconciliation layers.
+
+### 10.4 Referential Integrity
+
+`dw.FactSales` contains eight foreign-key relationships.
+
+| Foreign Key | Fact Column | Referenced Object | Referenced Column |
+|---|---|---|---|
+| `FK_FactSales_OrderDate` | `OrderDateKey` | `dw.DimDate` | `DateKey` |
+| `FK_FactSales_DueDate` | `DueDateKey` | `dw.DimDate` | `DateKey` |
+| `FK_FactSales_ShipDate` | `ShipDateKey` | `dw.DimDate` | `DateKey` |
+| `FK_FactSales_Product` | `ProductKey` | `dw.DimProduct` | `ProductKey` |
+| `FK_FactSales_Customer` | `CustomerKey` | `dw.DimCustomer` | `CustomerKey` |
+| `FK_FactSales_Territory` | `TerritoryKey` | `dw.DimTerritory` | `TerritoryKey` |
+| `FK_FactSales_SalesPerson` | `SalesPersonKey` | `dw.DimSalesPerson` | `SalesPersonKey` |
+| `FK_FactSales_ShipMethod` | `ShipMethodKey` | `dw.DimShipMethod` | `ShipMethodKey` |
+
+No cascading update or delete behavior is configured.
+
+Deployment validation confirmed that all eight foreign keys are enabled and trusted:
+
+- `is_disabled = 0`
+- `is_not_trusted = 0`
+
+The table is intentionally empty after physical deployment. Fact population is deferred to the FactSales ETL implementation phase.
+
 ---
 
 ## 11. Explicit Exclusions
@@ -606,21 +707,14 @@ Appropriate aggregations such as averages or weighted calculations belong to the
 
 ---
 
-## 14. Deferred Physical Decisions
+## 14. Deferred Implementation Decisions
 
-The following decisions are intentionally deferred from this logical specification:
+The following decisions remain intentionally deferred beyond the current physical table design:
 
-- FactSales surrogate-key strategy
-- Primary-key strategy
-- Unique constraints
-- Physical data types
-- Numeric precision and scale
-- NULL / NOT NULL rules
-- Foreign-key constraints
 - Unknown-member key values
 - Not Applicable member handling
 - Historical SCD lookup semantics
-- Indexes
+- Additional nonclustered indexes
 - Compression
 - Partitioning
 - Technical audit columns
@@ -628,7 +722,16 @@ The following decisions are intentionally deferred from this logical specificati
 - Physical staging structure
 - Incremental-load implementation
 
-These items belong to subsequent physical, staging, surrogate-resolution, and incremental-loading phases.
+The core physical FactSales structure is already resolved, including:
+
+- no separate `FactSalesKey`;
+- clustered primary key on `(SalesOrderID, SalesOrderDetailID)`;
+- physical data types and numeric precision;
+- NULL / NOT NULL rules;
+- seven domain `CHECK` constraints;
+- eight foreign-key constraints.
+
+The remaining items belong to staging, surrogate-key resolution, incremental-loading, and later performance-hardening phases.
 
 ---
 
@@ -672,4 +775,6 @@ The principal additive measures are:
 
 Header-level monetary amounts are intentionally excluded because their grain differs from the fact-table grain.
 
-This logical specification forms the basis for the subsequent physical design of `dw.FactSales`.
+The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
+
+This specification now defines the logical and physical design of `dw.FactSales`. Subsequent phases will implement staging, surrogate-key resolution, fact loading, incremental processing, and performance hardening.
