@@ -790,13 +790,127 @@ to the incremental-loading phase.
 
 ---
 
-## 15. Deferred Implementation Decisions
+## 15. Surrogate Key Resolution
+
+FactSales resolves dimension business keys from `stg.SalesOrderLine` into
+warehouse surrogate keys before fact loading.
+
+The current resolution contract is:
+
+- `OrderDate` -> `dw.DimDate.DateKey`
+- `DueDate` -> `dw.DimDate.DateKey`
+- `ShipDate` -> `dw.DimDate.DateKey`
+- `ProductID` -> `dw.DimProduct.ProductKey`
+- `CustomerID` -> `dw.DimCustomer.CustomerKey`
+- `TerritoryID` -> `dw.DimTerritory.TerritoryKey`
+- `SalesPersonID` -> `dw.DimSalesPerson.SalesPersonKey`
+- `ShipMethodID` -> `dw.DimShipMethod.ShipMethodKey`
+
+### 15.1 Special Dimension Members
+
+Deterministic negative surrogate keys are reserved outside the positive
+`IDENTITY(1,1)` range used by regular dimension members.
+
+The current convention is:
+
+- `-1` = Unknown
+- `-2` = Not Applicable
+
+`Unknown` represents a dimension that should apply to the transaction but whose
+business key cannot be resolved.
+
+`Not Applicable` represents a dimension that legitimately does not participate
+in the business event.
+
+The `Not Applicable` member is currently required only for
+`dw.DimSalesPerson`.
+
+For an online order where:
+
+`SalesPersonID IS NULL`
+
+the fact resolves:
+
+`SalesPersonKey = -2`
+
+This condition is supported by the current source profile, where all 60,398
+sales lines without a salesperson belong to online orders.
+
+A non-null salesperson business key that cannot be resolved uses:
+
+`SalesPersonKey = -1`
+
+The other non-date dimensions use `-1` when their business key cannot be
+resolved.
+
+The special members are seeded reproducibly by:
+
+`database/05_seed/003_SeedDimensionSpecialMembers.sql`
+
+### 15.2 Date Resolution
+
+Date keys are treated differently from general dimensional fallback members.
+
+`OrderDate` and `DueDate` are mandatory business dates and must resolve directly
+against `dw.DimDate`.
+
+A missing mandatory date key is treated as a data-quality failure rather than
+being hidden behind an Unknown date member.
+
+`ShipDateKey` remains `NULL` when `ShipDate` itself is `NULL`, representing a
+shipping event that has not occurred.
+
+A non-null `ShipDate` that does not resolve against `dw.DimDate` is also a
+data-quality failure.
+
+### 15.3 SCD Resolution Semantics
+
+The SCD Type 2 effective timestamps currently represent warehouse processing
+time, not historical business-effective time.
+
+The sales transactions occurred between 2011 and 2014, while the dimension
+versions were created by the warehouse in 2026.
+
+Therefore, transaction dates must not be compared directly with:
+
+- `EffectiveStartDateTime`
+- `EffectiveEndDateTime`
+
+for historical as-of lookup.
+
+For the current initial FactSales backfill, dimensional business keys resolve
+against the version where:
+
+`IsCurrent = 1`
+
+This uses the best dimensional representation currently available to the
+warehouse without falsely implying historical attribute reconstruction.
+
+Historical transaction-time reconstruction would require source data that
+provides actual business-effective validity periods.
+
+### 15.4 Resolution Validation
+
+The surrogate-key resolution prototype preserved all 121,317 staging rows.
+
+Current validation produced:
+
+- 0 missing OrderDate keys;
+- 0 missing DueDate keys;
+- 0 missing non-null ShipDate keys;
+- 0 Unknown Product members;
+- 0 Unknown Customer members;
+- 0 Unknown Territory members;
+- 0 Unknown SalesPerson members;
+- 0 Unknown ShipMethod members;
+- 60,398 Not Applicable SalesPerson resolutions.
+
+---
+
+## 16. Deferred Implementation Decisions
 
 The following decisions remain intentionally deferred beyond the current physical table design:
 
-- Unknown-member key values
-- Not Applicable member handling
-- Historical SCD lookup semantics
 - Additional nonclustered indexes
 - Compression
 - Partitioning
@@ -813,11 +927,11 @@ The core physical FactSales structure is already resolved, including:
 - seven domain `CHECK` constraints;
 - eight foreign-key constraints.
 
-The remaining items belong to surrogate-key resolution, incremental-loading, and later performance-hardening phases.
+The remaining items belong to incremental-loading and later performance-hardening phases.
 
 ---
 
-## 16. Design Summary
+## 17. Design Summary
 
 `dw.FactSales` represents one sales order detail line.
 
@@ -859,4 +973,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging and full-extraction layer. Subsequent phases will implement surrogate-key resolution, fact loading, incremental processing, and performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, and surrogate-key resolution contracts. Subsequent phases will implement measure derivation, fact loading, incremental processing, and performance hardening.
