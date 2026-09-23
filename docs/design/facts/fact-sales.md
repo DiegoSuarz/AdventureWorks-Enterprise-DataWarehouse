@@ -707,7 +707,90 @@ Appropriate aggregations such as averages or weighted calculations belong to the
 
 ---
 
-## 14. Deferred Implementation Decisions
+## 14. Staging and Extraction Design
+
+The sales fact pipeline uses a transaction-grain staging table:
+
+`stg.SalesOrderLine`
+
+Its grain is identical to the validated source and fact-table grain:
+
+`(SalesOrderID, SalesOrderDetailID)`
+
+The staging dataset is produced by joining:
+
+- `AdventureWorks2022.Sales.SalesOrderDetail`
+- `AdventureWorks2022.Sales.SalesOrderHeader`
+
+using `SalesOrderID`.
+
+`SalesOrderDetail` is the driving source because it defines the transactional
+line grain.
+
+The extraction does not filter the current source to shipped orders. The
+current snapshot contains only `Status = 5`, but the staging contract supports
+the complete documented order-status domain.
+
+The staging table contains 19 columns covering:
+
+- source grain identifiers;
+- the degenerate `SalesOrderNumber`;
+- order, due, and ship dates;
+- transactional attributes;
+- dimension business keys;
+- source transaction values;
+- separate header and detail modification timestamps;
+- extraction metadata.
+
+Dimension surrogate keys are intentionally not stored in staging. Their
+resolution belongs to the surrogate-key resolution phase.
+
+Derived fact measures such as `GrossAmount`, `DiscountAmount`, and
+`NetSalesAmount` are also intentionally deferred until the measures and
+fact-loading phases.
+
+`HeaderModifiedDate` and `DetailModifiedDate` are retained separately because
+the future incremental strategy must account for changes originating from
+either source table.
+
+Unlike dimensional staging tables, `stg.SalesOrderLine` does not currently use
+a `RowHash`. The transaction grain and the two source modification timestamps
+provide the required source lineage for the current full-extraction design.
+
+The physical staging table enforces:
+
+- clustered primary key on `(SalesOrderID, SalesOrderDetailID)`;
+- order status between 1 and 6;
+- positive order quantity;
+- non-negative unit price;
+- discount rate between 0 and 1.
+
+The extraction procedure is:
+
+`etl.LoadSalesOrderLineStage`
+
+The current implementation performs a full snapshot load using:
+
+1. source row counting;
+2. ETL execution registration;
+3. `TRUNCATE TABLE stg.SalesOrderLine`;
+4. normalized source extraction inside a transaction;
+5. row-count capture;
+6. successful or failed execution logging.
+
+The validated full extraction loaded:
+
+- 121,317 source rows;
+- 121,317 staging rows;
+- 0 missing rows after normalized source-to-stage reconciliation;
+- 0 unexpected staging rows.
+
+The definitive multi-source incremental extraction strategy remains deferred
+to the incremental-loading phase.
+
+---
+
+## 15. Deferred Implementation Decisions
 
 The following decisions remain intentionally deferred beyond the current physical table design:
 
@@ -719,7 +802,6 @@ The following decisions remain intentionally deferred beyond the current physica
 - Partitioning
 - Technical audit columns
 - CreatedAt or UpdatedAt metadata
-- Physical staging structure
 - Incremental-load implementation
 
 The core physical FactSales structure is already resolved, including:
@@ -731,11 +813,11 @@ The core physical FactSales structure is already resolved, including:
 - seven domain `CHECK` constraints;
 - eight foreign-key constraints.
 
-The remaining items belong to staging, surrogate-key resolution, incremental-loading, and later performance-hardening phases.
+The remaining items belong to surrogate-key resolution, incremental-loading, and later performance-hardening phases.
 
 ---
 
-## 15. Design Summary
+## 16. Design Summary
 
 `dw.FactSales` represents one sales order detail line.
 
@@ -777,4 +859,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales`. Subsequent phases will implement staging, surrogate-key resolution, fact loading, incremental processing, and performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging and full-extraction layer. Subsequent phases will implement surrogate-key resolution, fact loading, incremental processing, and performance hardening.
