@@ -693,7 +693,8 @@ The principal additive measures are:
 
 `NetSalesAmount`
 
-They may be aggregated across the dimensional context represented by the fact table.
+They may be aggregated across the dimensional context represented by the fact
+table.
 
 The following numeric values must not be treated as additive measures:
 
@@ -701,9 +702,80 @@ The following numeric values must not be treated as additive measures:
 
 `DiscountRate`
 
-Summing prices or discount rates across transaction rows does not produce a meaningful analytical result.
+Summing prices or discount rates across transaction rows does not produce a
+meaningful analytical result. Appropriate aggregations such as averages or
+weighted calculations belong to the semantic or reporting layer.
 
-Appropriate aggregations such as averages or weighted calculations belong to the semantic or reporting layer.
+### 13.1 Measure Derivation Contract
+
+FactSales derives monetary measures at sales-order-line grain.
+
+The validated formulas are:
+
+`GrossAmount = OrderQuantity * UnitPrice`
+
+`NetSalesAmount = OrderQuantity * UnitPrice * (1 - DiscountRate)`
+
+`DiscountAmount = GrossAmount - NetSalesAmount`
+
+All three stored monetary measures use:
+
+`DECIMAL(19,4)`
+
+The calculation contract therefore normalizes `GrossAmount` and
+`NetSalesAmount` to four decimal places before deriving `DiscountAmount` as the
+residual between them.
+
+### 13.2 Rounding Semantics
+
+`DiscountAmount` must not be independently rounded from:
+
+`OrderQuantity * UnitPrice * DiscountRate`
+
+and then used to derive net sales.
+
+Although mathematically equivalent before rounding, independently rounding the
+discount introduces line-level differences at the warehouse precision.
+
+Validation identified 378 sales lines where:
+
+`GrossAmount - independently rounded DiscountAmount`
+
+did not equal the normalized source `LineTotal`.
+
+The accumulated difference across those rows was:
+
+`0.0378`
+
+The selected calculation order instead treats normalized net sales as the
+source-reconcilable amount and derives discount as the residual.
+
+This guarantees at warehouse precision:
+
+`GrossAmount = DiscountAmount + NetSalesAmount`
+
+### 13.3 Source Reconciliation
+
+`AdventureWorks2022.Sales.SalesOrderDetail.LineTotal` is used as the source
+reference for net line sales.
+
+When both values are normalized to `DECIMAL(19,4)`, validation across all
+121,317 sales lines produced:
+
+- 0 NetSalesAmount-to-LineTotal mismatches;
+- 0 arithmetic identity mismatches;
+- 0 measure-domain violations.
+
+The validated aggregate baseline is:
+
+`TotalGrossAmount = 110373889.3134`
+
+`TotalDiscountAmount = 527507.8884`
+
+`TotalNetSalesAmount = 109846381.4250`
+
+These totals provide a reconciliation baseline for the subsequent physical
+FactSales load.
 
 ---
 
@@ -745,9 +817,9 @@ The staging table contains 19 columns covering:
 Dimension surrogate keys are intentionally not stored in staging. Their
 resolution belongs to the surrogate-key resolution phase.
 
-Derived fact measures such as `GrossAmount`, `DiscountAmount`, and
-`NetSalesAmount` are also intentionally deferred until the measures and
-fact-loading phases.
+Derived fact measures are intentionally not stored in staging. Their
+calculation contract is defined in the measure-semantics section and will be
+applied during FactSales loading.
 
 `HeaderModifiedDate` and `DetailModifiedDate` are retained separately because
 the future incremental strategy must account for changes originating from
@@ -973,4 +1045,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, and surrogate-key resolution contracts. Subsequent phases will implement measure derivation, fact loading, incremental processing, and performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Subsequent phases will implement fact loading, incremental processing, and performance hardening.

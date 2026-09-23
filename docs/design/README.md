@@ -38,7 +38,7 @@ Future dimensions include:
 
 | Document | Status |
 |----------|--------|
-| `fact-sales.md` | Physical Design + Staging + Key Resolution |
+| `fact-sales.md` | Physical Design + Staging + Key Resolution + Measures |
 
 Additional fact tables may be added as the project evolves.
 
