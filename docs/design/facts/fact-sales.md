@@ -20,7 +20,7 @@ The design must support:
 
 This document defines the logical and physical design of `dw.FactSales`.
 
-The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, historical lookup semantics, and incremental loading remain deferred to subsequent phases.
+The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, SCD lookup semantics, measure derivation, and full snapshot fact loading are implemented. Comprehensive initial-load validation and incremental loading remain pending.
 
 ---
 
@@ -155,7 +155,7 @@ Current observed behavior:
 
 A NULL caused by an online transaction is a valid business condition and must not automatically be interpreted as an unresolved lookup.
 
-Special-member handling is deferred to surrogate-key resolution design.
+Special-member handling follows the Unknown and Not Applicable rules defined in Section 15.
 
 ### 5.5 Ship Method
 
@@ -409,9 +409,11 @@ Logical column:
 
 `DiscountAmount`
 
-Derivation:
+Derivation at warehouse precision:
 
-`OrderQuantity * UnitPrice * DiscountRate`
+`GrossAmount - NetSalesAmount`
+
+Gross and net amounts are first normalized to `DECIMAL(19,4)`, following Section 13.
 
 Meaning:
 
@@ -429,7 +431,9 @@ Logical column:
 
 Derivation:
 
-`GrossAmount - DiscountAmount`
+`CONVERT(DECIMAL(19,4), OrderQuantity * UnitPrice * (1 - DiscountRate))`
+
+Net sales are calculated before deriving the residual discount, following Section 13.
 
 Equivalent source expression:
 
@@ -574,7 +578,7 @@ Deployment validation confirmed that all eight foreign keys are enabled and trus
 - `is_disabled = 0`
 - `is_not_trusted = 0`
 
-The table is intentionally empty after physical deployment. Fact population is deferred to the FactSales ETL implementation phase.
+The table was empty after physical deployment. The initial ETL smoke test subsequently loaded 121,317 rows through `etl.LoadFactSales`.
 
 ---
 
@@ -818,8 +822,8 @@ Dimension surrogate keys are intentionally not stored in staging. Their
 resolution belongs to the surrogate-key resolution phase.
 
 Derived fact measures are intentionally not stored in staging. Their
-calculation contract is defined in the measure-semantics section and will be
-applied during FactSales loading.
+calculation contract is defined in the measure-semantics section and is
+applied by `etl.LoadFactSales`.
 
 `HeaderModifiedDate` and `DetailModifiedDate` are retained separately because
 the future incremental strategy must account for changes originating from
@@ -979,7 +983,86 @@ Current validation produced:
 
 ---
 
-## 16. Deferred Implementation Decisions
+## 16. FactSales ETL Implementation
+
+### 16.1 Procedure and Load Contract
+
+The fact-loading procedure is:
+
+`etl.LoadFactSales`
+
+Its version-controlled implementation is:
+
+`database/04_procedures/etl.LoadFactSales.sql`
+
+The procedure reads the existing full snapshot in `stg.SalesOrderLine`.
+Source extraction remains a separate step performed by
+`etl.LoadSalesOrderLineStage`.
+
+Each successful fact load replaces the target with the transformed staging
+snapshot using transactional `TRUNCATE + INSERT`.
+
+The pre-load check confirmed that no foreign keys reference `dw.FactSales`.
+
+### 16.2 Execution Sequence
+
+1. Register the execution in `audit.ETLExecutionLog`.
+2. Capture the staging row count as `RowsRead`.
+3. Begin the load transaction.
+4. Validate OrderDate, DueDate, and non-null ShipDate resolution.
+5. Truncate `dw.FactSales`.
+6. Insert the complete 19-column projection.
+7. Capture inserted rows immediately through `@@ROWCOUNT`.
+8. Commit the load transaction.
+9. Mark the audit execution as `Succeeded`.
+
+Dimension resolution follows Section 15, including `IsCurrent = 1`,
+Unknown members, and Not Applicable SalesPerson handling.
+
+Measure derivation follows Section 13: gross and net amounts are normalized
+to four decimals before deriving discount as their residual.
+
+### 16.3 Error Handling
+
+The procedure uses `SET XACT_ABORT ON` and `TRY/CATCH`.
+
+Unresolved required dates raise error 51001 before the target is truncated.
+A null source ShipDate remains valid.
+
+When a load error leaves an active transaction, the CATCH block rolls it back.
+This includes reversing a transactional TRUNCATE and any uncommitted inserts.
+
+The audit registration occurs before the load transaction. After rollback,
+the error handler records `Failed`, stores the error details, and rethrows
+the original error with `THROW`.
+
+### 16.4 Initial Execution Evidence
+
+The initial smoke test produced:
+
+| Metric | Observed value |
+|---|---|
+| Development ExecutionID | 58 |
+| Status | Succeeded |
+| FactSales rows | 121317 |
+| RowsRead | 121317 |
+| RowsInserted | 121317 |
+| RowsUpdated | 0 |
+| RowsRejected | 0 |
+| ErrorMessage | NULL |
+
+ExecutionID 58 identifies this development run; it is not a fixed expected
+identifier for future executions.
+
+This evidence confirms successful initial execution, target row count, and
+success audit logging. It does not establish repeat-run idempotence,
+rollback recovery, or complete row-level reconciliation.
+
+Comprehensive initial-load validation remains assigned to Module 6.9.
+
+---
+
+## 17. Deferred Implementation Decisions
 
 The following decisions remain intentionally deferred beyond the current physical table design:
 
@@ -1003,7 +1086,7 @@ The remaining items belong to incremental-loading and later performance-hardenin
 
 ---
 
-## 17. Design Summary
+## 18. Design Summary
 
 `dw.FactSales` represents one sales order detail line.
 
@@ -1045,4 +1128,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Subsequent phases will implement fact loading, incremental processing, and performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Full snapshot fact loading is implemented through `etl.LoadFactSales` and has passed its initial execution smoke test. Subsequent phases will validate the loaded fact comprehensively, implement incremental processing, and address performance hardening.
