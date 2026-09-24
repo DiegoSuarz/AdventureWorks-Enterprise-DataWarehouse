@@ -20,7 +20,7 @@ The design must support:
 
 This document defines the logical and physical design of `dw.FactSales`.
 
-The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, SCD lookup semantics, measure derivation, and full snapshot fact loading are implemented. Comprehensive initial-load validation and incremental loading remain pending.
+The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, SCD lookup semantics, measure derivation, and full snapshot fact loading are implemented. Initial full-load validation is complete. Incremental loading remains pending.
 
 ---
 
@@ -1058,11 +1058,144 @@ This evidence confirms successful initial execution, target row count, and
 success audit logging. It does not establish repeat-run idempotence,
 rollback recovery, or complete row-level reconciliation.
 
-Comprehensive initial-load validation remains assigned to Module 6.9.
+Subsequent Module 6.9 validation established row-level reconciliation, repeat-load idempotence, and rollback recovery, as documented in Section 17.
 
 ---
 
-## 17. Deferred Implementation Decisions
+## 17. Initial Full-Load Validation
+
+Module 6.9 validated the loaded fact against staging and the original
+AdventureWorks2022 source, then exercised repeat loading and rollback.
+
+The results below describe the development snapshot used for validation.
+Execution identifiers are evidence references, not fixed test expectations.
+
+### 17.1 Grain and Line Coverage
+
+| Metric | Observed value |
+|---|---|
+| Staging rows | 121317 |
+| Fact rows | 121317 |
+| Missing fact lines | 0 |
+| Unexpected fact lines | 0 |
+| Duplicate fact grains | 0 |
+
+Coverage was compared in both directions using
+`(SalesOrderID, SalesOrderDetailID)`.
+
+### 17.2 Measure Reconciliation
+
+All 121317 fact lines matched the original SalesOrderDetail source for
+quantity, unit price, discount rate, gross amount, net sales, and residual
+discount. No source lines were missing from the comparison.
+
+Net sales were compared with source `LineTotal` normalized to
+`DECIMAL(19,4)` per line. Every fact row satisfied
+`GrossAmount - DiscountAmount = NetSalesAmount`.
+
+| Aggregate | Source | FactSales |
+|---|---|---|
+| Rows | 121317 | 121317 |
+| Quantity | 274914 | 274914 |
+| Gross amount | 110373889.3134 | 110373889.3134 |
+| Discount amount | 527507.8884 | 527507.8884 |
+| Net sales amount | 109846381.4250 | 109846381.4250 |
+
+Amounts were normalized per line before aggregation.
+
+### 17.3 Dimension Keys and Transaction Attributes
+
+All three date roles matched staging, including nullable ShipDate handling.
+All five non-date keys matched the resolution contract in Section 15,
+using current dimension versions and the defined special-member rules.
+
+SalesOrderNumber, OrderStatusCode, and IsOnlineOrder matched the original
+SalesOrderHeader source for all 121317 lines. No source headers were missing.
+
+The cross-database SalesOrderNumber comparison used
+`COLLATE DATABASE_DEFAULT` on both expressions to resolve the differing
+database collations without changing stored data or database settings.
+
+No fact rows used Unknown keys in any of the five non-date dimensions.
+Exactly 60398 lines used SalesPersonKey = -2, matching online source lines
+with no SalesPersonID. Row-level Not Applicable rule mismatches were zero.
+
+### 17.4 Repeat-Load Idempotence
+
+Development execution 59 completed with status Succeeded:
+121317 rows read and inserted, zero updated or rejected, and no error.
+
+A temporary copy of all 19 fact columns was captured before reloading.
+Both snapshots contained 121317 rows, and bidirectional EXCEPT comparisons
+returned zero differences.
+
+This establishes fact-content idempotence for the unchanged staging and
+dimension state used in the test. Each invocation creates a new audit entry.
+
+### 17.5 Rollback and Failure Audit
+
+A temporary CHECK constraint,
+`CK_FactSales_Validation_ForceFailure`, was added with `WITH NOCHECK`
+and the condition `OrderQuantity < 0`.
+
+Existing rows were retained. The subsequent load reached the INSERT after
+TRUNCATE and raised error 547 against the validation constraint.
+
+Development execution 60 was recorded as Failed, with 121317 rows read,
+zero inserted, updated, or rejected, and the original error details.
+
+After rollback, the fact still contained 121317 rows. Comparing all 19
+columns against the pre-test snapshot returned zero differences in both
+directions.
+
+The validation constraint was removed, and the session reported zero open
+transactions. RowsRejected remained zero because this loader aborts the
+whole snapshot rather than processing individual row rejections.
+
+---
+
+### 17.6 Reproducible Validation Scripts
+
+The validation scripts are maintained in `database/06_validation/`.
+Execution instructions and prerequisites are documented in that directory's
+[README](../../../database/06_validation/README.md).
+
+| Script | Scope |
+|---|---|
+| `001_ValidateFactSalesGrain.sql` | Row counts, grain uniqueness, and line coverage |
+| `002_ValidateFactSalesMeasures.sql` | Source measure reconciliation by line and totals |
+| `003_ValidateFactSalesDimensions.sql` | Date roles, dimension keys, attributes, and special members |
+| `004_ValidateFactSalesIdempotence.sql` | Repeat-load content equality and success auditing |
+| `005_ValidateFactSalesRollback.sql` | Controlled INSERT failure, rollback, cleanup, and failure auditing |
+
+All five saved scripts were executed in order with `sqlcmd -b` and passed.
+The shell runner used `pipefail` to preserve SQL failures through output
+formatting and stopped on the first unsuccessful script.
+
+The saved idempotence script produced development execution 61 with status
+Succeeded. Both fact snapshots contained 121317 rows, with zero differences
+across all 19 columns.
+
+The saved rollback script produced development execution 62 with status
+Failed and the expected error 547. All 121317 fact rows were restored with
+zero differences. TransactionCountAtCatch was zero, confirming that the
+procedure had already closed its transaction before returning the error.
+The temporary constraint was removed, and no transactions remained open.
+
+Executions 61 and 62 supplement the earlier manual evidence from executions
+59 and 60. These identifiers are not hard-coded in the validation scripts.
+
+Scripts 001-003 do not modify persistent data. Scripts 004-005 execute the
+loader and create audit entries; script 005 also temporarily changes the
+fact table's constraints. Run them explicitly in the development environment,
+with stable source, staging, and dimension data and no concurrent ETL activity.
+
+The expected Failed audit entry from script 005 represents a successful
+failure-handling test. Unexpected results raise validation errors.
+
+---
+
+## 18. Deferred Implementation Decisions
 
 The following decisions remain intentionally deferred beyond the current physical table design:
 
@@ -1086,7 +1219,7 @@ The remaining items belong to incremental-loading and later performance-hardenin
 
 ---
 
-## 18. Design Summary
+## 19. Design Summary
 
 `dw.FactSales` represents one sales order detail line.
 
@@ -1128,4 +1261,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Full snapshot fact loading is implemented through `etl.LoadFactSales` and has passed its initial execution smoke test. Subsequent phases will validate the loaded fact comprehensively, implement incremental processing, and address performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Full snapshot fact loading is implemented through `etl.LoadFactSales` and has passed initial-load reconciliation, dimension and attribute validation, repeat-load idempotence, and a controlled rollback test. Subsequent phases will implement incremental processing and address performance hardening.

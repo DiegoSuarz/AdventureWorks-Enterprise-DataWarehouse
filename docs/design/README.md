@@ -38,7 +38,7 @@ Future dimensions include:
 
 | Document | Status |
 |----------|--------|
-| `fact-sales.md` | Full Snapshot ETL Implemented — Initial Load Validation Pending |
+| `fact-sales.md` | Full Snapshot ETL Validated — Incremental Loading Pending |
 
 Additional fact tables may be added as the project evolves.
 
