@@ -328,12 +328,55 @@ not invoked. All five audit entries recorded no error.
 
 These identifiers and boundaries describe development evidence only.
 
-### 9.5 Remaining Validation
+### 9.5 Controlled Header Failure and Retry
 
-Initial orchestration and no-change processing have passed.
-Controlled failure and frozen-boundary retry, inactive-stream preservation
-during retry, recovery after fact commit, concurrency, and the remaining
-Section 8 scenarios still require validation.
+The executed test body is preserved in:
+
+`database/06_validation/007_ValidateFactSalesIncrementalRetry.sql`
+
+The test temporarily moved the Header LOW key from 75123 to 75122,
+preserving its date, and nulled ShipDateKey for detail 121317.
+A temporary CHECK constraint rejected the loader's attempt to restore
+that value. Source data remained unchanged.
+
+| ExecutionID | Scenario | Status | RowsRead | RowsInserted | RowsUpdated |
+|---|---|---|---|---|---|
+| 81 | Forced fact UPDATE failure | Failed | 3 | 0 | 0 |
+| 84 | Retry after removing the constraint | Succeeded | 3 | 0 | 1 |
+
+Execution 81 captured error 547 from `etl.LoadFactSalesDelta`.
+The parent audit recorded FactCommitted = 0 and BatchFinalized = 0.
+The fact matched the prepared snapshot exactly after rollback, and
+TransactionCountAtCatch was zero.
+
+Header retained LOW key 75122 and HIGH key 75123 at the original
+Header date, with status Failed and CurrentExecutionID = 81.
+Its previous LastSuccessfulExecutionID was preserved.
+Every column of the inactive Detail control remained unchanged.
+
+After removing the constraint, execution 84 restored the pending fact
+value. All 19 fact columns matched the original snapshot in both directions.
+Header returned to Ready, advanced LOW to the retained HIGH, cleared its
+pending state, and recorded LastSuccessfulExecutionID = 84.
+Detail remained identical to its original state throughout the retry.
+
+Test cleanup then restored the original watermark rows, including their
+execution references and UpdatedAt values, and restored delta staging.
+The final state contained 121317 fact rows, zero delta rows, no validation
+constraint, and no open transaction. Audit entries were retained.
+
+The test passed all assertions. Execution identifiers describe development
+evidence only. The saved copy adds script identification to the tested body.
+
+### 9.6 Remaining Validation
+
+Initial orchestration, no-change processing, and controlled Header failure
+and retry with unchanged sources have passed.
+
+Retry behavior when new source changes appear after failure still requires
+validation, including preservation of frozen HIGH boundaries and deferral
+of new work from a Ready stream. Recovery after fact commit, concurrency,
+and the remaining Section 8 scenarios also remain pending.
 
 The standalone insertion test used an existing source line missing from
 the target. End-to-end ingestion of newly created source data remains

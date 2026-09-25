@@ -1,7 +1,7 @@
 # FactSales Validation
 
-Scripts 001-005 validate the full snapshot loader. Script 006 separately
-validates atomic rollback and failure auditing for the fact delta loader.
+Scripts 001-005 validate the full snapshot loader. Scripts 006-007 provide
+standalone development tests for fact delta rollback and incremental retry.
 
 Run from the repository root against the development databases
 `AdventureWorks_EDW` and `AdventureWorks2022`, after staging, dimension,
@@ -133,3 +133,46 @@ recovery after a disconnected or terminated session.
 Development execution 75 passed. The expected Failed audit status represents
 successful failure-handling validation. Evidence is recorded in
 [Incremental design, Section 9.3](../../docs/design/facts/fact-sales-incremental.md#93-fact-delta-application).
+
+## Standalone Incremental Failure and Retry Test
+
+`007_ValidateFactSalesIncrementalRetry.sql` validates a controlled Header-only
+failure and retry through `etl.LoadFactSalesIncremental`.
+Run it explicitly; it is not included in the full snapshot runner.
+
+Prerequisites:
+
+- Deploy the incremental orchestrator, extractor, and fact delta loader.
+- Complete initial incremental processing so both controls are Ready
+  with initialized LOW boundaries and no pending batch.
+- Start with a validated fact matching the source snapshot.
+- Header LOW must match the source date and key of order 75123.
+- Order 75122 must share that Header modification date.
+- Order 75123 must have its three original lines in source and fact,
+  including detail 121317 with a non-null fact ShipDateKey.
+- Neither source may contain a composite pair above its committed LOW.
+- Keep source and dimensions stable, with no concurrent ETL or outer transaction.
+
+Execute with `sqlcmd -b` and the connection options shown above, setting
+`-i` to `database/06_validation/007_ValidateFactSalesIncrementalRetry.sql`.
+
+The test temporarily rewinds Header LOW, nulls one fact ShipDateKey,
+and adds `CK_FactSales_IncrementalRetry_ForceFailure`.
+It expects error 547, preserved batch boundaries, unchanged prepared fact
+contents, and an untouched Detail control.
+
+After removing the constraint, the retry must read three lines, update one,
+and finalize Header at the retained HIGH. Detail must remain unchanged.
+
+Cleanup restores the original fact value, both watermark rows including
+execution references and timestamps, and the original delta staging contents.
+Audit entries from the failed attempt and successful retry are retained.
+Bidirectional comparisons verify complete restoration.
+
+Run to completion. A disconnected or terminated session can interrupt cleanup;
+inspect the test constraint, fact line, and watermark state before resuming ETL.
+
+Development executions 81 and 84 passed. This test keeps source data unchanged
+between attempts; retry behavior with newly arriving changes requires separate
+validation. Evidence is recorded in
+[Incremental design, Section 9.5](../../docs/design/facts/fact-sales-incremental.md#95-controlled-header-failure-and-retry).
