@@ -1,0 +1,253 @@
+# Incremental Loading Design — FactSales
+
+## 1. Objective and Scope
+
+Implement incremental inserts and updates for `dw.FactSales`, preserving
+the grain `(SalesOrderID, SalesOrderDetailID)` and the existing measure
+and dimension-resolution contracts.
+
+The full snapshot pipeline remains available for baseline loading.
+Incremental processing uses a separate delta staging table and applies
+changes without truncating the fact.
+
+Physical source deletions and changes originating only in dimensions
+are outside this incremental contract.
+
+## 2. Source Watermarks
+
+The orchestrator is `etl.LoadFactSalesIncremental`.
+
+Two rows in `audit.ETLWatermark` track the source streams:
+
+| ProcessName | SourceObject | Business key |
+|---|---|---|
+| `etl.LoadFactSalesIncremental.Header` | `AdventureWorks2022.Sales.SalesOrderHeader` | SalesOrderID |
+| `etl.LoadFactSalesIncremental.Detail` | `AdventureWorks2022.Sales.SalesOrderDetail` | SalesOrderDetailID |
+
+These ProcessName values identify control streams, not separate procedures.
+
+Each stream uses the ordered pair `(ModifiedDate, BusinessKey)`.
+Watermark timestamps preserve source precision through `DATETIME2(7)`.
+HIGH is selected from an actual source row ordered by both columns.
+
+Development profiling found unique business keys in both sources.
+The observed maximum pairs were:
+
+| Source | ModifiedDate | BusinessKey | Rows sharing timestamp |
+|---|---|---|---|
+| Header | 2014-07-07 00:00:00.0000000 | 75123 | 40 |
+| Detail | 2014-06-30 00:00:00.0000000 | 121317 | 96 |
+
+These values are profiling evidence, not seed values.
+
+## 3. Initialization
+
+Both control rows start in Ready state with null LOW and HIGH pairs.
+
+The first incremental execution captures source HIGH boundaries and
+processes all available lines within those boundaries.
+
+Existing fact lines are compared before updating; missing lines are inserted.
+LOW advances only after successful fact processing.
+
+A previously completed full load does not automatically initialize these
+watermarks. The initial incremental replay establishes verified progress.
+
+## 4. Delta Selection
+
+Each active source stream selects rows within its own composite interval:
+
+`LOW < (ModifiedDate, BusinessKey) <= HIGH`
+
+A null LOW means there is no lower boundary. Pair comparisons use timestamp
+first and business key as the tie-breaker.
+
+Candidate fact grains are the union of:
+
+- All detail lines belonging to headers selected by the Header interval.
+- Detail lines selected directly by the Detail interval.
+
+UNION removes overlap when both sources select the same line.
+The resulting grains are joined to header and detail to build the normalized
+delta projection, with one row per `(SalesOrderID, SalesOrderDetailID)`.
+
+The counterpart source row does not need to fall within its own interval:
+a changed header must refresh its lines even when their detail timestamps
+have not changed, and vice versa.
+
+## 5. Coordinated Batch State
+
+### 5.1 Execution Ownership
+
+The orchestrator acquires an exclusive application lock for the sales
+incremental process and retains it through acquisition, loading, finalization,
+and failure handling.
+
+Both control rows are inspected together under transaction locks.
+An InProgress row blocks a new run; abandoned executions require explicit
+recovery after confirming that their owner is no longer running.
+
+### 5.2 New Batch
+
+When both streams are Ready, capture each source's candidate HIGH.
+
+A stream is active only when HIGH exists and either LOW is null
+or HIGH is greater than LOW. Persist HIGH, InProgress, and the same parent ExecutionID
+for all active streams in one transaction.
+
+Inactive streams remain Ready and unchanged. Do not persist HIGH = LOW.
+
+If neither stream is active, clear delta staging and record a successful
+zero-row execution without changing LOW.
+
+### 5.3 Failed Batch Retry
+
+If any stream is Failed, retry the pending batch before acquiring new work.
+
+Failed streams reuse their persisted HIGH and unchanged LOW.
+When both streams are Failed, their CurrentExecutionID values must match.
+
+Ready streams remain inactive throughout that retry. Do not capture new
+HIGH values for them. Their committed LOW represents their previous progress;
+new source changes are deferred until the pending batch succeeds.
+
+All retried active streams receive the new parent ExecutionID together.
+
+### 5.4 Success and Failure
+
+After successful fact processing, finalize all active streams together:
+advance LOW to HIGH, clear HIGH and CurrentExecutionID, set Ready, and record
+LastSuccessfulExecutionID.
+
+Watermark finalization and parent success auditing share one transaction.
+Inactive streams remain unchanged.
+
+On failure before finalization, preserve LOW and the frozen HIGH values.
+Mark the streams owned by the current execution as Failed and record the
+parent failure together in a transaction after rolling back active work.
+
+Fact application commits before watermark finalization. If finalization fails,
+the pending intervals are replayed through idempotent fact processing.
+
+## 6. Delta Application
+
+The incremental components are listed below; their implementation status
+is recorded in Section 9.
+
+| Object | Responsibility |
+|---|---|
+| `stg.SalesOrderLineDelta` | Normalized candidate lines for the current batch |
+| `etl.LoadSalesOrderLineDeltaStage` | Extract and deduplicate bounded source changes |
+| `etl.LoadFactSalesDelta` | Resolve keys, derive measures, and apply fact changes |
+| `etl.LoadFactSalesIncremental` | Coordinate ownership, watermarks, and execution |
+
+Delta staging preserves the full staging projection, with HeaderModifiedDate
+and DetailModifiedDate stored as DATETIME2(7).
+
+Fact processing resolves dimensions and derives measures using the existing
+FactSales contracts. Required date resolution is validated before applying
+target changes.
+
+Within one fact transaction, update existing grains only when their projected
+values differ and insert missing grains. Preserve fact rows outside the delta.
+Use explicit UPDATE and INSERT operations.
+
+Report actual inserted and updated row counts. An unchanged replay produces
+zero inserts and updates. A failed fact transaction rolls back all its changes.
+
+The original full snapshot staging and loading procedures retain their
+existing purpose and remain separate from delta processing.
+
+## 7. Source Change Assumptions
+
+Every relevant source insert or update must produce a composite pair greater
+than that stream's committed LOW to be detected by this strategy.
+
+The business key resolves timestamp ties within an ordered extraction.
+It does not detect later modifications whose pair is at or below LOW.
+
+Unchanged or backdated ModifiedDate values, late commits behind LOW, and
+physical deletes are not covered by this watermark-only design.
+
+Development runs require stable source data during boundary capture and
+extraction, and stable dimensions during fact resolution.
+The application lock coordinates ETL executions; it does not freeze OLTP writes.
+Full snapshot and incremental fact loads must not run concurrently.
+
+Persisted HIGH values retain extraction intervals, not historical source
+versions. Failed-batch recovery requires source data to remain unchanged until
+the retry completes if the same candidate rows and values must be reproduced.
+
+## 8. Required Validation Scenarios
+
+- Initial replay from null LOW reconciles with the existing full snapshot.
+- A subsequent no-change run leaves the fact unchanged and delta staging empty.
+- Header-only changes refresh all affected order lines.
+- Detail-only changes refresh the affected detail lines.
+- Changes in both sources produce one candidate per fact grain.
+- New orders and new lines are inserted without duplicate grains.
+- Timestamp ties and fractional seconds respect composite interval boundaries.
+- Unchanged candidate values produce zero fact updates.
+- A fact-application failure preserves the previous fact contents and both LOWs.
+- Failed active streams retain HIGH and retry without capturing new boundaries.
+- A Ready stream remains inactive during another stream's failed-batch retry.
+- Replay after fact commit but before watermark finalization is idempotent.
+- Concurrent orchestrator execution cannot acquire the same active batch.
+- Successful finalization advances all active streams atomically.
+
+## 9. Implementation Progress and Extraction Evidence
+
+### 9.1 Implemented Components
+
+The following scripts have been deployed:
+
+- `database/05_seed/004_SeedFactSalesWatermarks.sql`
+- `database/03_staging/007_CreateStagingSalesOrderLineDelta.sql`
+- `database/04_procedures/etl.LoadSalesOrderLineDeltaStage.sql`
+
+Both watermark streams were initialized as Ready with null boundaries
+and execution references.
+
+Delta staging contains 19 columns. HeaderModifiedDate, DetailModifiedDate,
+and ExtractedAt use DATETIME2(7).
+
+The extractor validates interval parameters, selects unique candidate grains,
+and replaces delta staging transactionally. Successful staging changes and
+their execution audit are committed together.
+
+The extractor does not advance watermarks.
+
+### 9.2 Development Execution Evidence
+
+| ExecutionID | Scenario | Inserted rows | Audit status |
+|---|---|---|---|
+| 63 | Both sources active, null LOW, current source HIGH | 121317 | Succeeded |
+| 64 | Header-only interval selecting order 75123 | 3 | Succeeded |
+| 65 | Detail-only interval selecting detail 121317 | 1 | Succeeded |
+| 67 | Overlapping Header and Detail selection | 3 | Succeeded |
+| 68 | Both sources inactive; previous delta cleared | 0 | Succeeded |
+| 69 | Active Header interval with HIGH equal to LOW | 0 | Failed, expected error 51112 |
+
+Execution identifiers describe these development runs, not fixed expectations.
+
+The initial extraction matched all 18 source-derived columns in both
+directions with zero differences. All rows shared one ExtractedAt value.
+
+The Header-only test excluded key 75122 and selected all three lines of
+order 75123. The Detail-only test excluded key 121316 and selected only
+detail 121317. Both tests used equal LOW and HIGH timestamps.
+
+The overlap test retained one copy of detail 121317. The inactive-source
+test cleared the previous three rows and left no open transaction.
+
+The invalid-interval test failed before replacing staging, which remained
+empty, and left no open transaction.
+
+### 9.3 Remaining Implementation
+
+`etl.LoadFactSalesDelta` and `etl.LoadFactSalesIncremental` remain pending.
+
+The completed checks validate extraction using existing source records.
+Fact inserts and updates, coordinated watermark advancement, failed-batch
+retry, concurrency, and the remaining Section 8 scenarios require subsequent
+implementation and validation.

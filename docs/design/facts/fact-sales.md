@@ -861,8 +861,11 @@ The validated full extraction loaded:
 - 0 missing rows after normalized source-to-stage reconciliation;
 - 0 unexpected staging rows.
 
-The definitive multi-source incremental extraction strategy remains deferred
-to the incremental-loading phase.
+The multi-source incremental strategy is defined in
+[fact-sales-incremental.md](fact-sales-incremental.md).
+Separate delta staging and bounded extraction are implemented and have
+passed initial extraction validation. Incremental fact application and
+watermark orchestration remain pending.
 
 ---
 
