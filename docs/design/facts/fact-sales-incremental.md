@@ -243,11 +243,61 @@ test cleared the previous three rows and left no open transaction.
 The invalid-interval test failed before replacing staging, which remained
 empty, and left no open transaction.
 
-### 9.3 Remaining Implementation
+### 9.3 Fact Delta Application
 
-`etl.LoadFactSalesDelta` and `etl.LoadFactSalesIncremental` remain pending.
+`etl.LoadFactSalesDelta` is implemented and deployed through:
 
-The completed checks validate extraction using existing source records.
-Fact inserts and updates, coordinated watermark advancement, failed-batch
-retry, concurrency, and the remaining Section 8 scenarios require subsequent
-implementation and validation.
+`database/04_procedures/etl.LoadFactSalesDelta.sql`
+
+The procedure builds the 19-column fact projection, validates required dates
+and projection row counts, updates changed existing grains, and inserts
+missing grains. Fact rows outside the delta are preserved.
+
+Comparison uses EXCEPT across the 17 non-key columns, including nullable
+ShipDateKey. RowsRead, RowsInserted, and RowsUpdated are BIGINT output
+parameters. Successful fact changes and their audit entry commit together.
+
+On failure, the procedure rolls back its transaction, resets inserted and
+updated counters to zero, records Failed, and rethrows the original error.
+It rejects an outer transaction and does not advance watermarks.
+
+| ExecutionID | Scenario | RowsRead | RowsInserted | RowsUpdated | Status |
+|---|---|---|---|---|---|
+| 70 | Empty delta | 0 | 0 | 0 | Succeeded |
+| 72 | Three unchanged lines | 3 | 0 | 0 | Succeeded |
+| 73 | Restore a deliberately nulled ShipDateKey | 3 | 0 | 1 | Succeeded |
+| 74 | Reinsert a deliberately removed fact line | 3 | 1 | 0 | Succeeded |
+| 75 | INSERT failure after a preceding UPDATE | 3 | 0 | 0 | Failed, expected |
+
+Execution 71 extracted the three-line delta for order 75123 used by the
+subsequent tests. Execution identifiers are development evidence only.
+
+The empty and unchanged tests preserved all 121317 fact rows exactly.
+The successful update and insert tests restored the original fact contents,
+with zero differences across all 19 columns in both directions.
+
+For execution 75, detail 121315 had its ShipDateKey temporarily nulled,
+and detail 121317 was temporarily removed. A test CHECK constraint then
+rejected reinsertion of detail 121317 with error 547.
+
+The loader rolled back the preceding UPDATE as well as the failed INSERT.
+All 121316 prepared rows remained identical, and TransactionCountAtCatch
+was zero. Cleanup removed the constraint and restored all 121317 original
+rows with zero differences and no open transactions.
+
+The executed rollback test body is preserved in
+`database/06_validation/006_ValidateFactSalesDeltaRollback.sql`,
+with an added descriptive header and development prerequisites.
+
+### 9.4 Remaining Implementation
+
+`etl.LoadFactSalesIncremental` remains pending.
+
+The completed checks establish extraction behavior and standalone fact
+delta application. Coordinated watermark advancement, frozen-boundary
+retry, recovery after fact commit, concurrency, and the remaining Section 8
+scenarios still require orchestration implementation and validation.
+
+The insertion test exercised a missing target grain using an existing
+source line; end-to-end ingestion of newly created source data remains
+part of the subsequent incremental pipeline validation.

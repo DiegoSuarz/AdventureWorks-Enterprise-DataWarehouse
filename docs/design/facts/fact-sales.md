@@ -863,9 +863,11 @@ The validated full extraction loaded:
 
 The multi-source incremental strategy is defined in
 [fact-sales-incremental.md](fact-sales-incremental.md).
-Separate delta staging and bounded extraction are implemented and have
-passed initial extraction validation. Incremental fact application and
-watermark orchestration remain pending.
+Separate delta staging, bounded extraction, and incremental fact
+application are implemented. Validation covers extraction, unchanged
+deltas, fact updates and inserts, and atomic rollback with failure
+auditing. Watermark orchestration and end-to-end incremental pipeline
+validation remain pending.
 
 ---
 
