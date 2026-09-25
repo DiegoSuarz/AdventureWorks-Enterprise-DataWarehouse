@@ -289,15 +289,52 @@ The executed rollback test body is preserved in
 `database/06_validation/006_ValidateFactSalesDeltaRollback.sql`,
 with an added descriptive header and development prerequisites.
 
-### 9.4 Remaining Implementation
+### 9.4 Incremental Orchestration
 
-`etl.LoadFactSalesIncremental` remains pending.
+`etl.LoadFactSalesIncremental` is implemented and deployed through:
 
-The completed checks establish extraction behavior and standalone fact
-delta application. Coordinated watermark advancement, frozen-boundary
-retry, recovery after fact commit, concurrency, and the remaining Section 8
-scenarios still require orchestration implementation and validation.
+`database/04_procedures/etl.LoadFactSalesIncremental.sql`
 
-The insertion test exercised a missing target grain using an existing
-source line; end-to-end ingestion of newly created source data remains
-part of the subsequent incremental pipeline validation.
+The orchestrator acquires an exclusive session application lock, coordinates
+both watermark controls, and invokes extraction and fact application.
+Active stream acquisition is transactional. Watermark finalization and
+parent success auditing also share one transaction.
+
+Failure handling preserves pending boundaries and records owned streams
+and the parent execution as Failed together. Parent audit counters retain
+committed fact changes if a later finalization step fails.
+
+Initial development execution evidence:
+
+| ExecutionID | Process | RowsRead | RowsInserted | RowsUpdated | Status |
+|---|---|---|---|---|---|
+| 76 | Orchestrator, initial batch | 121317 | 0 | 0 | Succeeded |
+| 77 | Delta extraction | 121317 | 121317 | 0 | Succeeded |
+| 78 | Fact delta application | 121317 | 0 | 0 | Succeeded |
+| 79 | Orchestrator, no new changes | 0 | 0 | 0 | Succeeded |
+| 80 | Empty delta extraction | 0 | 0 | 0 | Succeeded |
+
+Execution 76 advanced both streams from null LOW boundaries to:
+
+- Header: (2014-07-07 00:00:00.0000000, 75123).
+- Detail: (2014-06-30 00:00:00.0000000, 121317).
+
+Both controls returned to Ready with null HIGH and CurrentExecutionID,
+and LastSuccessfulExecutionID = 76.
+
+Execution 79 preserved both controls, including LastSuccessfulExecutionID.
+Its extractor cleared delta staging to zero rows; fact application was
+not invoked. All five audit entries recorded no error.
+
+These identifiers and boundaries describe development evidence only.
+
+### 9.5 Remaining Validation
+
+Initial orchestration and no-change processing have passed.
+Controlled failure and frozen-boundary retry, inactive-stream preservation
+during retry, recovery after fact commit, concurrency, and the remaining
+Section 8 scenarios still require validation.
+
+The standalone insertion test used an existing source line missing from
+the target. End-to-end ingestion of newly created source data remains
+part of subsequent incremental pipeline validation.

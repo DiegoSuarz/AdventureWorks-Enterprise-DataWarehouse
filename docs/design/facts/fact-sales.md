@@ -20,7 +20,7 @@ The design must support:
 
 This document defines the logical and physical design of `dw.FactSales`.
 
-The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, SCD lookup semantics, measure derivation, and full snapshot fact loading are implemented. Initial full-load validation is complete. Incremental loading remains pending.
+The physical table structure, data types, nullability, primary key, foreign keys, and domain constraints are defined in this specification. Staging, surrogate-key resolution, SCD lookup semantics, measure derivation, and full snapshot fact loading are implemented. Initial full-load validation is complete. Incremental loading is implemented; comprehensive pipeline validation remains pending.
 
 ---
 
@@ -866,8 +866,9 @@ The multi-source incremental strategy is defined in
 Separate delta staging, bounded extraction, and incremental fact
 application are implemented. Validation covers extraction, unchanged
 deltas, fact updates and inserts, and atomic rollback with failure
-auditing. Watermark orchestration and end-to-end incremental pipeline
-validation remain pending.
+auditing. Watermark orchestration is implemented and has passed initial
+and no-change execution checks. Failure recovery, concurrency, and the
+remaining end-to-end incremental scenarios are pending validation.
 
 ---
 
@@ -1209,7 +1210,7 @@ The following decisions remain intentionally deferred beyond the current physica
 - Partitioning
 - Technical audit columns
 - CreatedAt or UpdatedAt metadata
-- Incremental-load implementation
+- Completion of incremental-load validation
 
 The core physical FactSales structure is already resolved, including:
 
@@ -1266,4 +1267,4 @@ Header-level monetary amounts are intentionally excluded because their grain dif
 
 The physical implementation contains 19 columns, uses no separate fact surrogate key, enforces the validated source grain through a clustered composite primary key, and protects data integrity with seven `CHECK` constraints and eight trusted foreign keys.
 
-This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Full snapshot fact loading is implemented through `etl.LoadFactSales` and has passed initial-load reconciliation, dimension and attribute validation, repeat-load idempotence, and a controlled rollback test. Subsequent phases will implement incremental processing and address performance hardening.
+This specification now defines the logical and physical design of `dw.FactSales` together with its implemented staging, full-extraction, special-member, surrogate-key resolution, and measure-derivation contracts. Full snapshot fact loading is implemented through `etl.LoadFactSales` and has passed initial-load reconciliation, dimension and attribute validation, repeat-load idempotence, and a controlled rollback test. Subsequent phases will complete incremental pipeline validation and address performance hardening.

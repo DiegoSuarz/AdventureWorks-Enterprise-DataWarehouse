@@ -38,8 +38,8 @@ Future dimensions include:
 
 | Document | Status |
 |----------|--------|
-| `fact-sales.md` | Full Snapshot ETL Validated — Incremental Loading Pending |
-| [fact-sales-incremental.md](facts/fact-sales-incremental.md) | Delta Extraction and Fact Application Validated — Orchestration Pending |
+| `fact-sales.md` | Full Snapshot ETL Validated — Incremental Validation In Progress |
+| [fact-sales-incremental.md](facts/fact-sales-incremental.md) | Incremental ETL Implemented — Recovery and End-to-End Validation Pending |
 
 Additional fact tables may be added as the project evolves.
 
