@@ -1,7 +1,8 @@
 # FactSales Validation
 
-Scripts 001-005 validate the full snapshot loader. Scripts 006-007 provide
-standalone development tests for fact delta rollback and incremental retry.
+Scripts 001-005 validate the full snapshot loader. Scripts 006-008 provide
+standalone development tests for fact delta rollback, incremental retry,
+and recovery after fact commit.
 
 Run from the repository root against the development databases
 `AdventureWorks_EDW` and `AdventureWorks2022`, after staging, dimension,
@@ -176,3 +177,41 @@ Development executions 81 and 84 passed. This test keeps source data unchanged
 between attempts; retry behavior with newly arriving changes requires separate
 validation. Evidence is recorded in
 [Incremental design, Section 9.5](../../docs/design/facts/fact-sales-incremental.md#95-controlled-header-failure-and-retry).
+
+## Standalone Finalization Recovery Test
+
+`008_ValidateFactSalesFinalizationRecovery.sql` validates recovery when
+fact changes commit but watermark finalization fails.
+Run it explicitly; it is not included in the full snapshot runner.
+
+Use the same prerequisites and Header-only fixture as test 007.
+Keep source and dimensions stable, with no concurrent ETL or outer transaction.
+
+Execute with `sqlcmd -b` and the connection options shown above, setting
+`-i` to `database/06_validation/008_ValidateFactSalesFinalizationRecovery.sql`.
+
+The test temporarily rewinds Header LOW and nulls the fact ShipDateKey
+for detail 121317. A temporary CHECK constraint named
+`CK_ETLWatermark_FactSales_FinalizationFailure` on `audit.ETLWatermark`
+prevents Header from returning to Ready.
+
+The failed attempt must read three lines and commit one fact update,
+then capture error 547 with FactCommitted = 1 and BatchFinalized = 0.
+The fact must match its original snapshot, Header must retain its pending
+boundaries, and the inactive Detail control must remain unchanged.
+
+After removing the constraint, the retry must read three lines with
+zero inserts and zero updates, then finalize Header at the retained HIGH.
+Detail must remain unchanged.
+
+Cleanup restores the original fact value, watermark rows including
+execution references and timestamps, and delta staging contents.
+Bidirectional comparisons verify restoration. Audit entries are retained.
+
+Run to completion. A disconnected or terminated session can interrupt cleanup;
+inspect the test constraint, fact line, and watermark state before resuming ETL.
+
+Development executions 87 and 90 passed. Source changes between attempts
+and concurrent execution are outside this test's scope.
+Evidence is recorded in
+[Incremental design, Section 9.6](../../docs/design/facts/fact-sales-incremental.md#96-recovery-after-fact-commit).
