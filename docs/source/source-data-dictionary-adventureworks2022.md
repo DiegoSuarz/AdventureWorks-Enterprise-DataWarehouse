@@ -183,17 +183,17 @@ Contiene la cabecera de cada pedido de venta. Su granularidad es un registro por
 | `OrderDate` | `datetime` | — | Incluir | Fecha del pedido; relación con `DimDate`. |
 | `DueDate` | `datetime` | — | Incluir | Fecha comprometida de entrega. |
 | `ShipDate` | `datetime` | — | Incluir | Fecha real de envío. |
-| `Status` | `tinyint` | — | Incluir | Estado del pedido; conviene traducirlo mediante una regla documentada. |
-| `OnlineOrderFlag` | `bit` | — | Incluir | Distingue pedido en línea de pedido comercial. |
+| `Status` | `tinyint` | — | Incluir | Estado del pedido: 1 = In process, 2 = Approved, 3 = Backordered, 4 = Rejected, 5 = Shipped, 6 = Cancelled. El snapshot actual contiene únicamente `5 = Shipped`. |
+| `OnlineOrderFlag` | `bit` | — | Incluir | Canal del pedido: `0` = pedido gestionado por vendedor; `1` = pedido realizado online por el cliente. |
 | `SalesOrderNumber` | `nvarchar(25)` | — | Incluir | Número documental visible. |
 | `PurchaseOrderNumber` | `nvarchar(25)` nullable | — | Opcional | Orden de compra del cliente. |
 | `AccountNumber` | `nvarchar(15)` nullable | — | Opcional | Cuenta comercial del pedido. |
 | `CustomerID` | `int` | FK | Incluir | Relación con `DimCustomer`. |
-| `SalesPersonID` | `int` nullable | FK | Futuro | Vendedor responsable; requiere dimensión de vendedor. |
+| `SalesPersonID` | `int` nullable | FK | Incluir | Relación con `DimSalesPerson`. El `NULL` es válido para pedidos online en el snapshot actual. |
 | `TerritoryID` | `int` nullable | FK | Incluir | Relación con territorio. |
 | `BillToAddressID` | `int` | FK | Futuro | Dirección de facturación; requiere dimensión de ubicación. |
 | `ShipToAddressID` | `int` | FK | Futuro | Dirección de entrega. |
-| `ShipMethodID` | `int` | FK | Futuro | Método de envío. |
+| `ShipMethodID` | `int` | FK | Incluir | Relación con `DimShipMethod`. |
 | `CreditCardID` | `int` nullable | FK | Excluir | Identificador sensible/operativo; no se requiere para análisis comercial inicial. |
 | `CreditCardApprovalCode` | `varchar(15)` nullable | — | Excluir | Dato operativo y potencialmente sensible. |
 | `CurrencyRateID` | `int` nullable | FK | Futuro | Tipo de cambio aplicado. |
@@ -203,11 +203,11 @@ Contiene la cabecera de cada pedido de venta. Su granularidad es un registro por
 | `TotalDue` | `money` | — | Incluir | Total documental del pedido. |
 | `Comment` | `nvarchar(128)` nullable | — | Opcional | Comentario libre; baja estandarización. |
 | `rowguid` | `uniqueidentifier` | — | Excluir | Identificador técnico de replicación. |
-| `ModifiedDate` | `datetime` | — | Incluir en staging | Base para incrementalidad, auditoría y CDC. |
+| `ModifiedDate` | `datetime` | — | Incluir en staging | Candidato para detección incremental y trazabilidad. En el snapshot actual coincide con `ShipDate` y presenta numerosos empates, por lo que no constituye por sí solo una posición incremental determinista. |
 
 ### Decisión para hechos
 
-La cabecera aporta dimensiones degeneradas, fechas y medidas de nivel pedido. Las medidas monetarias deben analizarse junto con el detalle para evitar duplicación al agregar ventas por producto.
+La cabecera aporta fechas, contexto dimensional y atributos transaccionales de nivel pedido. `SubTotal`, `TaxAmt`, `Freight` y `TotalDue` tienen grain de pedido y no deben repetirse directamente en una tabla de hechos con grain de línea. En el snapshot actual, `TotalDue = SubTotal + TaxAmt + Freight` para los 31,465 pedidos y `SubTotal` reconcilia con `SUM(SalesOrderDetail.LineTotal)` al normalizar ambos importes a cuatro decimales.
 
 ---
 
@@ -215,21 +215,21 @@ La cabecera aporta dimensiones degeneradas, fechas y medidas de nivel pedido. La
 
 ### Propósito y contexto
 
-Contiene las líneas de productos incluidas en cada pedido. Su granularidad es una línea por producto dentro de un pedido; es la fuente principal de `dw.FactSales`.
+Contiene las líneas de detalle incluidas en cada pedido. Su granularidad es una fila por línea de detalle de pedido; es la fuente transaccional principal de `dw.FactSales`. El identificador físico del grain es la clave compuesta (`SalesOrderID`, `SalesOrderDetailID`).
 
 | Campo | Tipo | Clave | Uso DW | Descripción y decisión |
 |---|---|---|---|---|
-| `SalesOrderID` | `int` | PK/FK | Incluir | Identifica el pedido padre. |
-| `SalesOrderDetailID` | `int` | PK | Incluir | Identificador único de la línea. |
+| `SalesOrderID` | `int` | PK (1/2) / FK | Incluir | Identifica el pedido padre y forma parte de la clave primaria compuesta. |
+| `SalesOrderDetailID` | `int` | PK (2/2) | Incluir | Identificador de la línea dentro de la clave primaria compuesta. |
 | `CarrierTrackingNumber` | `nvarchar(25)` nullable | — | Opcional | Seguimiento logístico; no es prioritario para ventas. |
 | `OrderQty` | `smallint` | — | Incluir como medida | Cantidad vendida. |
 | `ProductID` | `int` | FK | Incluir | Relación con `DimProduct`. |
 | `SpecialOfferID` | `int` | FK | Incluir después | Permite analizar promociones; requiere fuente adicional. |
 | `UnitPrice` | `money` | — | Incluir como medida | Precio unitario antes del descuento. |
-| `UnitPriceDiscount` | `money` | — | Incluir como medida | Descuento aplicado por unidad. |
-| `LineTotal` | `numeric(38,6)` calculada | — | Incluir | Total de la línea; puede recalcularse y validarse. |
+| `UnitPriceDiscount` | `money` | — | Incluir como medida | Tasa o fracción de descuento aplicada al precio unitario. En el snapshot observado varía entre `0.0000` y `0.4000`. |
+| `LineTotal` | `numeric(38,6)` calculada | — | Incluir | Importe neto calculado de la línea. Se validó en las 121,317 filas como `OrderQty * UnitPrice * (1 - UnitPriceDiscount)`. |
 | `rowguid` | `uniqueidentifier` | — | Excluir | Identificador técnico de replicación. |
-| `ModifiedDate` | `datetime` | — | Incluir en staging | Detección de cambios, auditoría y CDC. |
+| `ModifiedDate` | `datetime` | — | Incluir en staging | Candidato para detección incremental y trazabilidad. En el snapshot actual coincide con `OrderDate` y presenta numerosos empates, por lo que requiere un desempate determinista para incrementalidad. |
 
 ### Medidas derivadas recomendadas
 
@@ -239,7 +239,22 @@ DiscountAmount   = OrderQty * UnitPrice * UnitPriceDiscount
 NetSalesAmount   = GrossAmount - DiscountAmount
 ```
 
-El grano de `FactSales` debe declararse explícitamente como: **una fila por línea de producto de un pedido**. Esto evita sumar `SubTotal`, `TaxAmt`, `Freight` o `TotalDue` de la cabecera repetidamente por cada línea.
+El grain de `FactSales` debe declararse explícitamente como: **una fila por línea de detalle de pedido**. Esto evita asumir que (`SalesOrderID`, `ProductID`) define el grain y evita repetir `SubTotal`, `TaxAmt`, `Freight` o `TotalDue` de la cabecera en cada línea.
+
+### Hallazgos de profiling relevantes para `FactSales`
+
+- `SalesOrderHeader`: 31,465 pedidos.
+- `SalesOrderDetail`: 121,317 líneas y 31,465 pedidos representados.
+- No existen líneas huérfanas respecto de `SalesOrderHeader`.
+- Los 3,806 pedidos gestionados por vendedor tienen `SalesPersonID` y `PurchaseOrderNumber`; los 27,659 pedidos online tienen ambos valores en `NULL`.
+- Todos los pedidos del snapshot actual están en `Status = 5 (Shipped)` y tienen `ShipDate`.
+- `OrderDate <= ShipDate <= DueDate` se cumple en los 31,465 pedidos.
+- `LineTotal` reconcilia con la fórmula de net sales en las 121,317 líneas.
+- `SUM(LineTotal)` reconcilia con `SalesOrderHeader.SubTotal` al comparar a cuatro decimales.
+- No se observaron cantidades, precios ni totales de línea no positivos.
+- `ModifiedDate` tiene comportamiento efectivo diario (`00:00:00.000`) y numerosos empates en ambas fuentes.
+- La cobertura de business keys utilizada por ventas es completa para Product, Customer, Territory, SalesPerson y ShipMethod; no se encontraron referencias huérfanas.
+- `dw.DimDate` cubre todas las fechas utilizadas por `OrderDate`, `ShipDate` y `DueDate`; no se encontraron fechas nulas ni fechas sin correspondencia dimensional.
 
 ---
 
@@ -251,6 +266,8 @@ El grano de `FactSales` debe declararse explícitamente como: **una fila por lí
 | `Sales.Customer.TerritoryID → Sales.SalesTerritory.TerritoryID` | Asocia clientes con territorios. |
 | `Sales.SalesOrderHeader.CustomerID → Sales.Customer.CustomerID` | Relaciona pedidos con clientes. |
 | `Sales.SalesOrderHeader.TerritoryID → Sales.SalesTerritory.TerritoryID` | Relaciona pedidos con territorios. |
+| `Sales.SalesOrderHeader.SalesPersonID → Sales.SalesPerson.BusinessEntityID` | Relaciona pedidos gestionados por vendedor con `DimSalesPerson`; puede ser `NULL` para ventas online. |
+| `Sales.SalesOrderHeader.ShipMethodID → Purchasing.ShipMethod.ShipMethodID` | Relaciona pedidos con métodos de envío. |
 | `Sales.SalesOrderDetail.SalesOrderID → Sales.SalesOrderHeader.SalesOrderID` | Relaciona líneas con cabeceras. |
 | `Sales.SalesOrderDetail.ProductID → Production.Product.ProductID` | Relaciona líneas con productos. |
 

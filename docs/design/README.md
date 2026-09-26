@@ -34,11 +34,14 @@ Future dimensions include:
 
 ---
 
-## Future Fact Tables
+## Fact Tables
 
-```text
-fact-sales.md
-```
+| Document | Status |
+|----------|--------|
+| [fact-sales.md](facts/fact-sales.md) | Fact Design and Full Snapshot ETL Validated |
+| [fact-sales-incremental.md](facts/fact-sales-incremental.md) | Incremental ETL Validated |
+| [fact-sales-data-quality.md](facts/fact-sales-data-quality.md) | Quality and Reconciliation Complete |
+| [fact-sales-star-validation.md](facts/fact-sales-star-validation.md) | Analytical Star Validation Complete |
 
 Additional fact tables may be added as the project evolves.
 
