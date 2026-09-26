@@ -457,13 +457,33 @@ historical source values. This test verifies deferral for separate source
 rows and does not demonstrate snapshot replay when pending rows themselves
 change between attempts.
 
-### 9.8 Remaining Validation
+### 9.8 Concurrent Execution Rejection
+
+A manual two-session test verified rejection while another session owned
+the orchestrator's application lock.
+
+Session 53 acquired an Exclusive, Session-owned lock in AdventureWorks_EDW
+using resource `etl.LoadFactSalesIncremental` and database principal `public`.
+The acquisition returned 0.
+
+Session 59 called `etl.LoadFactSalesIncremental` and received error 51201.
+Assertions verified no new audit entries, unchanged fact, delta staging,
+and watermark contents, and zero open transactions.
+
+Session 53 then released the lock and confirmed NoLock.
+
+This validates the orchestrator's application-lock admission guard.
+It does not simulate two complete ETL executions racing through every phase.
+Session identifiers describe this development run only.
+
+### 9.9 Remaining Validation
 
 Initial orchestration, no-change processing, controlled Header failure
 and retry, recovery after fact commit, and frozen-boundary retry with
 new date-only changes on separate source rows have passed.
 
-Concurrency and the remaining Section 8 scenarios still require validation.
+Application-lock rejection has passed. The remaining Section 8 scenarios
+must be checked against existing evidence before adding further tests.
 Changes to pending source rows between attempts are outside the evidence
 provided by test 009.
 

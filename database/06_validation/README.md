@@ -271,3 +271,23 @@ This test covers date-only changes on rows outside the failed batch.
 Frozen boundaries do not provide a historical source snapshot.
 Evidence is recorded in
 [Incremental design, Section 9.7](../../docs/design/facts/fact-sales-incremental.md#97-frozen-boundary-retry-with-new-source-changes).
+
+## Manual Concurrent Execution Rejection Test
+
+Run in development without unrelated ETL or source writes.
+
+1. In session A, acquire an Exclusive application lock in AdventureWorks_EDW
+   using `sys.sp_getapplock`, resource `etl.LoadFactSalesIncremental`,
+   owner `Session`, timeout 0, and database principal `public`.
+2. Keep A connected. In session B, snapshot fact, delta staging, watermarks,
+   and the audit row count, then call `etl.LoadFactSalesIncremental`.
+3. Expect error 51201, no new audit entries, unchanged snapshots in both
+   comparison directions, and zero open transactions in B.
+4. Release the lock in the same session A using `sys.sp_releaseapplock`
+   with the same resource, owner, and principal. Confirm NoLock using
+   `APPLOCK_MODE`, even if the checks in B fail.
+
+Development sessions 53 and 59 passed these checks.
+This covers application-lock rejection, not every possible concurrency race.
+Evidence is recorded in
+[Incremental design, Section 9.8](../../docs/design/facts/fact-sales-incremental.md#98-concurrent-execution-rejection).
