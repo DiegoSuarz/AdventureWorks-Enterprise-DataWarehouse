@@ -476,20 +476,27 @@ This validates the orchestrator's application-lock admission guard.
 It does not simulate two complete ETL executions racing through every phase.
 Session identifiers describe this development run only.
 
-### 9.9 Remaining Validation
+### 9.9 Incremental Validation Closure
 
-Initial orchestration, no-change processing, controlled Header failure
-and retry, recovery after fact commit, and frozen-boundary retry with
-new date-only changes on separate source rows have passed.
+The required Section 8 scenarios are covered by the recorded development
+evidence: initial replay, no-change processing, Header and Detail selection,
+overlapping candidates, new source lines and orders, composite boundaries,
+unchanged values, rollback, retained-boundary retry, inactive-stream deferral,
+post-commit recovery, application-lock rejection, and atomic finalization
+of both active streams.
 
-Application-lock rejection has passed. The remaining Section 8 scenarios
-must be checked against existing evidence before adding further tests.
-Changes to pending source rows between attempts are outside the evidence
-provided by test 009.
+Test 010 validated a new detail on an existing order.
+Test 011 validated new orders, fractional-second intervals for both sources,
+and recovery after a forced finalization failure with both streams active.
 
-The standalone insertion test used an existing source line missing from
-the target. End-to-end ingestion of newly created source data remains
-part of subsequent incremental pipeline validation.
+Micromodule 6.10 is complete for the documented incremental contract.
+
+Frozen HIGH boundaries constrain candidate selection; they do not preserve
+historical source values. Changes to pending source rows between attempts
+remain outside the snapshot-replay guarantees of this design.
+The concurrency evidence covers application-lock admission rejection.
+Source business-trigger side effects are outside tests 010 and 011.
+
 
 ### New Source Detail — Development Evidence
 
@@ -512,3 +519,43 @@ transactions. Audit entries and the consumed identity value were retained.
 This evidence covers new Detail ingestion for an existing Header. It does
 not establish new Header ingestion, full value-level validation of the new
 fact row, or correctness of the source business triggers.
+
+### 9.10 New Orders, Fractional Boundaries, and Dual-Stream Recovery
+
+`011_ValidateFactSalesNewOrdersAndBoundaries.sql` passed through an
+administrative development connection.
+
+The fixtures were three new orders, each containing one new detail:
+
+| Order | Detail | ModifiedDate |
+|---|---|---|
+| 75124 | 121319 | 2014-07-08 00:00:00.0033333 |
+| 75125 | 121320 | 2014-07-08 00:00:00.0066667 |
+| 75126 | 121321 | 2014-07-08 00:00:00.0100000 |
+
+Separate Header-only and Detail-only extraction checks selected exactly
+the second fixture: the exact LOW was excluded, the exact HIGH included,
+and the later fractional timestamp excluded.
+
+| ExecutionID | Scenario | Status | RowsRead | RowsInserted | RowsUpdated |
+|---|---|---|---|---|---|
+| 107 | Forced dual-stream finalization failure | Failed | 3 | 3 | 0 |
+| 110 | Retry after committed fact inserts | Succeeded | 3 | 0 | 0 |
+
+Execution 107 committed the three fact inserts before the forced
+watermark-finalization failure. Both streams retained their original LOWs,
+pending HIGHs, and failed execution ownership.
+
+Execution 110 replayed the same candidates without duplicate inserts or
+updates. Both controls finalized at the retained boundaries and referenced
+the same successful execution.
+
+Assertions compared all fact columns against the original fact plus the
+three expected new rows. Source Header and Detail contents, fact, delta
+staging, and both watermark controls were restored and compared with their
+original snapshots. Both source triggers were enabled, the temporary
+constraint was removed, and OpenTransactions was zero.
+
+Audit entries and consumed source identity values were retained.
+The final result was:
+`PASS: New orders, fractional boundaries, dual-stream recovery; state restored.`

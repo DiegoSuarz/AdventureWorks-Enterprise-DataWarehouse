@@ -328,3 +328,44 @@ Development execution 102 tested detail 121318 and returned
 This validates a new detail on an existing order. It does not validate
 creation of a new Header, all dimensional values and measures of the new
 fact row, or source business-trigger side effects.
+
+## Standalone New Orders and Boundary Recovery Test
+
+`011_ValidateFactSalesNewOrdersAndBoundaries.sql` covers new order ingestion,
+fractional composite boundaries, and recovery with both watermark streams
+active.
+
+Run the entire file in a fresh administrative development session, without
+an outer transaction, concurrent source writes, dimension changes, or ETL.
+Temporary tables from earlier tests must not already exist in that session.
+
+Both controls must be initialized and Ready, with no pending source
+candidates. Source order 75123 and detail 121317, and their reference fact
+line, must exist. The two standard source triggers must be enabled.
+
+The connection requires source ALTER, INSERT, and DELETE permissions on
+both source tables, plus the permissions needed for ETL, watermark constraint
+creation, and cleanup.
+
+The test creates three orders with one detail each at distinct fractional
+timestamps within the same second. Separate bounded extractions verify
+exclusive LOW, inclusive HIGH, and exclusion of the later fixture.
+
+A temporary watermark CHECK constraint then forces finalization to fail
+after three fact inserts commit. Assertions require both original LOWs
+and both pending HIGHs to be retained. After removing the constraint,
+the retry must read three candidates with zero inserts and updates and
+finalize both streams under the same successful execution.
+
+Full-value fact comparisons use the previously reconciled reference line
+with the new source identifiers and order numbers.
+Cleanup restores source rows, fact, delta staging, and watermark contents;
+checks also require enabled triggers and no temporary constraint or open
+transaction. Audit entries and consumed identity values remain.
+
+If interrupted, inspect fixture rows, triggers, the temporary constraint,
+and ETL state before resuming. Handled-error cleanup does not guarantee
+recovery after a disconnected or terminated session.
+
+Development executions 107 and 110 passed.
+See incremental design Section 9.10 for the recorded evidence.
