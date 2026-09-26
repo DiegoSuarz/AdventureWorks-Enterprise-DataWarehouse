@@ -490,3 +490,25 @@ provided by test 009.
 The standalone insertion test used an existing source line missing from
 the target. End-to-end ingestion of newly created source data remains
 part of subsequent incremental pipeline validation.
+
+### New Source Detail — Development Evidence
+
+`010_ValidateFactSalesNewSourceDetail.sql` passed through an administrative
+development connection.
+
+| ExecutionID | Source detail | RowsRead | RowsInserted | RowsUpdated | Result |
+|---|---|---|---|---|---|
+| 102 | 121318 | 1 | 1 | 0 | Succeeded and restored |
+
+A genuinely new detail was inserted for existing order 75123 and processed
+through `etl.LoadFactSalesIncremental`. The test verified the new grain in
+delta staging and fact, preservation of existing fact rows, an unchanged
+Header control, and advancement of the Detail watermark.
+
+Cleanup assertions passed for fact, delta staging, watermark controls,
+removal of the new source detail, the enabled Detail trigger, and zero open
+transactions. Audit entries and the consumed identity value were retained.
+
+This evidence covers new Detail ingestion for an existing Header. It does
+not establish new Header ingestion, full value-level validation of the new
+fact row, or correctness of the source business triggers.

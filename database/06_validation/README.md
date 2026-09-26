@@ -291,3 +291,40 @@ Development sessions 53 and 59 passed these checks.
 This covers application-lock rejection, not every possible concurrency race.
 Evidence is recorded in
 [Incremental design, Section 9.8](../../docs/design/facts/fact-sales-incremental.md#98-concurrent-execution-rejection).
+
+## Standalone New Source Detail Test
+
+`010_ValidateFactSalesNewSourceDetail.sql` validates a genuinely new source
+detail for existing order 75123 through the incremental orchestrator.
+
+Run the complete script in a fresh administrative development session,
+without concurrent source writes, ETL, or an outer transaction.
+Both sales watermarks must be initialized and Ready, with no pending source
+candidates. Source detail 121317 must exist as the reference line.
+
+The connection needs source ALTER, INSERT, and DELETE permissions on
+Sales.SalesOrderDetail, plus the permissions required for the ETL and cleanup.
+
+The test clones the reference detail with a newly generated identity and a
+ModifiedDate above the Detail LOW boundary. The Detail trigger is disabled
+only inside the insertion and cleanup transactions, then enabled before commit.
+
+Assertions require one parent execution with RowsRead = 1, RowsInserted = 1,
+RowsUpdated = 0, and no error. They verify the new grain in delta staging and
+fact, preservation of pre-existing fact rows, an unchanged Header watermark,
+and advancement of Detail to the new source boundary.
+
+Cleanup removes the test detail from source and fact and restores both
+watermark controls and delta staging. Final assertions verify restoration,
+an enabled Detail trigger, and no open transaction.
+
+Audit entries and the consumed source identity value remain.
+If execution is interrupted, inspect the test detail, trigger, fact, staging,
+and watermarks before resuming ETL.
+
+Development execution 102 tested detail 121318 and returned
+`Succeeded and restored`.
+
+This validates a new detail on an existing order. It does not validate
+creation of a new Header, all dimensional values and measures of the new
+fact row, or source business-trigger side effects.
