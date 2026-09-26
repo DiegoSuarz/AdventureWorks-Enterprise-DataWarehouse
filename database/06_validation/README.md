@@ -1,8 +1,8 @@
 # FactSales Validation
 
-Scripts 001-005 validate the full snapshot loader. Scripts 006-008 provide
+Scripts 001-005 validate the full snapshot loader. Scripts 006-009 provide
 standalone development tests for fact delta rollback, incremental retry,
-and recovery after fact commit.
+recovery after fact commit, and deferral of new source changes.
 
 Run from the repository root against the development databases
 `AdventureWorks_EDW` and `AdventureWorks2022`, after staging, dimension,
@@ -215,3 +215,59 @@ Development executions 87 and 90 passed. Source changes between attempts
 and concurrent execution are outside this test's scope.
 Evidence is recorded in
 [Incremental design, Section 9.6](../../docs/design/facts/fact-sales-incremental.md#96-recovery-after-fact-commit).
+
+## Standalone Retry With New Source Changes Test
+
+`009_ValidateFactSalesRetryNewChanges.sql` validates frozen-boundary retry
+and deferral of new work from an inactive Ready stream.
+Run it explicitly; it is not included in the full snapshot runner.
+
+Prerequisites:
+
+- Meet the initial fixture and watermark prerequisites of test 007.
+- Header order 75122 must have its two original detail lines.
+- Detail 121310 must belong to order 75121.
+- All three additional candidate grains must already exist in the fact.
+- Both standard source triggers must exist and be enabled, with no
+  additional triggers on the two source tables.
+- Use a development connection with source ALTER and UPDATE permissions,
+  as well as the permissions needed for test 007 in AdventureWorks_EDW.
+- Keep dimensions stable and allow no concurrent source writes or ETL.
+- Run without an outer transaction.
+
+The development run used an administrative connection in Azure Data Studio.
+Execute the complete script in a fresh query session.
+For command-line execution, use `sqlcmd -b` with a suitably privileged
+connection and set `-i` to
+`database/06_validation/009_ValidateFactSalesRetryNewChanges.sql`.
+
+After forcing the Header-only fact failure, the test changes only
+ModifiedDate for Header order 75122 and Detail 121310 of order 75121.
+Each date is moved one day above its stream's original LOW.
+The failed order 75123 remains unchanged in source.
+
+Source triggers are disabled inside the source-edit transaction and
+enabled before commit. Cleanup uses the same transactional mechanism
+to restore the original dates without business-trigger side effects.
+
+The retry must extract exactly the three lines of order 75123, update
+one fact row, finalize Header at the retained HIGH, and preserve every
+column of the inactive Detail control.
+
+The next execution must extract exactly the three deferred candidates,
+perform zero fact inserts and updates, and finalize both streams at
+their new boundaries.
+
+Cleanup restores source dates, the test fact value, both watermark rows,
+and delta staging. Assertions verify restoration and enabled source
+triggers. Audit entries are retained.
+
+Run to completion. If execution is disconnected or terminated, inspect
+source dates, trigger states, the test constraint, fact, and watermarks
+before resuming ETL; cleanup may have been interrupted.
+
+Development executions 93, 96, and 99 produced the expected results.
+This test covers date-only changes on rows outside the failed batch.
+Frozen boundaries do not provide a historical source snapshot.
+Evidence is recorded in
+[Incremental design, Section 9.7](../../docs/design/facts/fact-sales-incremental.md#97-frozen-boundary-retry-with-new-source-changes).

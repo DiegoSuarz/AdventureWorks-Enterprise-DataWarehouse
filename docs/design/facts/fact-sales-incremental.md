@@ -410,15 +410,62 @@ The test passed all assertions. Execution identifiers describe development
 evidence only. Source changes between attempts and concurrent execution
 were outside this test's scope.
 
-### 9.7 Remaining Validation
+### 9.7 Frozen-Boundary Retry With New Source Changes
+
+The executed test is preserved in:
+
+`database/06_validation/009_ValidateFactSalesRetryNewChanges.sql`
+
+The test reused the controlled Header failure fixture from Section 9.5.
+After the failure, it advanced only ModifiedDate for Header order 75122
+and Detail line 121310 of order 75121, using dates one day above each
+stream's original LOW. Source rows belonging to failed order 75123
+remained unchanged.
+
+| ExecutionID | Scenario | Status | RowsRead | RowsInserted | RowsUpdated |
+|---|---|---|---|---|---|
+| 93 | Forced fact UPDATE failure | Failed | 3 | 0 | 0 |
+| 96 | Retry while newer source changes exist | Succeeded | 3 | 0 | 1 |
+| 99 | Next batch processes deferred candidates | Succeeded | 3 | 0 | 0 |
+
+Execution 93 captured error 547 from `etl.LoadFactSalesDelta`, with
+FactCommitted = 0 and BatchFinalized = 0.
+
+Execution 96 extracted exactly the three original lines of order 75123.
+Header finalized at the retained HIGH, despite the newer Header source
+date. Every column of the inactive Detail control remained unchanged,
+despite its pending source change. The fact matched its original snapshot.
+
+Execution 99 extracted exactly the two lines of order 75122 and detail
+121310 of order 75121. Both streams finalized at their new source
+boundaries and referenced execution 99. No fact values changed because
+the source edits affected only ModifiedDate.
+
+The test ran through an administrative development connection.
+Source triggers were disabled only within the source-edit and cleanup
+transactions, then enabled again before each commit to avoid unrelated
+business-trigger side effects.
+
+Cleanup verified restoration of the original source dates, fact contents,
+delta staging, and watermark rows including execution references and
+timestamps. Both source triggers were enabled. The final result contained
+121317 fact rows, zero delta rows, and no open transaction.
+Audit entries were retained.
+
+Frozen HIGH boundaries constrain candidate selection; they do not preserve
+historical source values. This test verifies deferral for separate source
+rows and does not demonstrate snapshot replay when pending rows themselves
+change between attempts.
+
+### 9.8 Remaining Validation
 
 Initial orchestration, no-change processing, controlled Header failure
-and retry with unchanged sources, and recovery after fact commit have passed.
+and retry, recovery after fact commit, and frozen-boundary retry with
+new date-only changes on separate source rows have passed.
 
-Retry behavior when new source changes appear after failure still requires
-validation, including preservation of frozen HIGH boundaries and deferral
-of new work from a Ready stream. Concurrency and the remaining Section 8
-scenarios also remain pending.
+Concurrency and the remaining Section 8 scenarios still require validation.
+Changes to pending source rows between attempts are outside the evidence
+provided by test 009.
 
 The standalone insertion test used an existing source line missing from
 the target. End-to-end ingestion of newly created source data remains
