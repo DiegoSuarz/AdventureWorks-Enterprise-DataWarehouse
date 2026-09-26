@@ -369,3 +369,23 @@ recovery after a disconnected or terminated session.
 
 Development executions 107 and 110 passed.
 See incremental design Section 9.10 for the recorded evidence.
+
+## Analytical Star Schema Validation
+
+`012_ValidateFactSalesStarSchema.sql` validates analytical joins and five
+grouping scenarios across the completed star schema.
+
+Run after fact loading, with stable fact and dimensions and no concurrent
+ETL or outer transaction. It reads persistent tables and uses local
+temporary tables.
+
+The script joins dimensions by stored surrogate keys without filtering
+IsCurrent, checks dimension coverage and preservation of fact grain, and
+reconciles grouped quantities and monetary totals with the fact baseline.
+
+Order, due, and ship dates are tested as separate date roles.
+Distinct orders are reported per group but are not summed across groups.
+
+The development execution passed all five scenarios.
+See [Star schema validation](../../docs/design/facts/fact-sales-star-validation.md)
+for the baseline, group counts, and interpretation.
