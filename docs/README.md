@@ -170,8 +170,11 @@ The current engineering focus is:
 M6 — FactSales & Star Schema Completion
 ```
 
-The active warehouse expansion target is `dw.FactSales`. Module 6 completes the
-analytical star schema before the Power BI layer is built.
+`dw.FactSales` is implemented and validated, completing the analytical
+star schema. Module 6 is undergoing documentation and release closure.
+Power BI remains the planned scope of Module 7.
+
+See [v1.4.0 release preparation](releases/v1.4.0.md).
 
 ---
 
@@ -209,7 +212,7 @@ Dimension Specifications   : 6 implemented
 Source Documentation        : Active
 Reference Catalog           : Active
 Current Stable Release      : v1.3.0
-Current Module              : Module 6 — FactSales & Star Schema Completion
+Current Module              : Module 6 — Documentation & Release Closure
 Next Module                 : Module 7 — Power BI Analytics
 Final Module                : Module 8 — Production Hardening & Project Closure
 ```

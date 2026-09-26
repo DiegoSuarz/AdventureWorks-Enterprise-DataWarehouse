@@ -98,7 +98,7 @@ Calendar dates are immutable.
 
 `dw.DimDate` will act as a role-playing dimension for fact tables.
 
-For `FactSales`, planned roles include:
+For the implemented `FactSales`, date roles include:
 
 ```text
 OrderDateKey
@@ -1084,7 +1084,7 @@ AdventureWorks2022
 └───────────┬────────────┘
             │
             ▼
-      Future FactSales
+      dw.FactSales
 
             │
             ▼
@@ -1100,14 +1100,22 @@ AdventureWorks2022
 
 # 18. Planned Tables
 
-The active warehouse expansion target for Module 6 is:
+The implemented and validated fact table delivered by Module 6 is:
 
 ```text
 dw.FactSales
 ```
 
-The implementation of `dw.FactSales` is the primary warehouse deliverable
-of Module 6 and will complete the analytical star schema.
+`dw.FactSales` completes the analytical star schema at sales-order-line grain.
+It connects the existing dimensions through stored surrogate keys and supports
+validated full and incremental loading.
+
+Implementation and validation references:
+
+- [FactSales design](../design/facts/fact-sales.md)
+- [Incremental loading](../design/facts/fact-sales-incremental.md)
+- [Quality and reconciliation](../design/facts/fact-sales-data-quality.md)
+- [Analytical validation](../design/facts/fact-sales-star-validation.md)
 
 ---
 
@@ -1117,7 +1125,7 @@ of Module 6 and will complete the analytical star schema.
 Catalog: Active
 Database: AdventureWorks_EDW
 Current Stable Release: v1.3.0
-Current Module: Module 6 — FactSales & Star Schema Completion
+Current Module: Module 6 — Documentation & Release Closure
 Next Module: Module 7 — Power BI Analytics
 Final Module: Module 8 — Production Hardening & Project Closure
 ```
