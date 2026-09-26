@@ -49,7 +49,7 @@ The grain answers:
 
 > What does one row in this fact table represent?
 
-For the active `dw.FactSales` design:
+For the implemented and validated `dw.FactSales` table:
 
 ```text
 One row = one sales order detail line
