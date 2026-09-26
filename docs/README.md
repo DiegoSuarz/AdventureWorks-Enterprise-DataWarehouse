@@ -164,17 +164,17 @@ audit.ETLWatermark
 `audit.ETLWatermark` stores the durable control state used by incremental
 watermark-driven processes.
 
-The current engineering focus is:
+The next planned engineering focus is:
 
 ```text
-M6 — FactSales & Star Schema Completion
+M7 — Power BI Analytics
 ```
 
 `dw.FactSales` is implemented and validated, completing the analytical
-star schema. Module 6 is undergoing documentation and release closure.
+star schema. Module 6 is complete and integrated through PR #14.
 Power BI remains the planned scope of Module 7.
 
-See [v1.4.0 release preparation](releases/v1.4.0.md).
+See [v1.4.0 release notes](releases/v1.4.0.md).
 
 ---
 
@@ -211,8 +211,8 @@ Architecture Documentation : Active
 Dimension Specifications   : 6 implemented
 Source Documentation        : Active
 Reference Catalog           : Active
-Current Stable Release      : v1.3.0
-Current Module              : Module 6 — Documentation & Release Closure
+Current Stable Release      : v1.4.0
+Latest Completed Module     : Module 6 — FactSales & Star Schema Completion
 Next Module                 : Module 7 — Power BI Analytics
 Final Module                : Module 8 — Production Hardening & Project Closure
 ```

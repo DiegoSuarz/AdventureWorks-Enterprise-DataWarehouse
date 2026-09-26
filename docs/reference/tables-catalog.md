@@ -1124,8 +1124,8 @@ Implementation and validation references:
 ```text
 Catalog: Active
 Database: AdventureWorks_EDW
-Current Stable Release: v1.3.0
-Current Module: Module 6 — Documentation & Release Closure
+Current Stable Release: v1.4.0
+Latest Completed Module: Module 6 — FactSales & Star Schema Completion
 Next Module: Module 7 — Power BI Analytics
 Final Module: Module 8 — Production Hardening & Project Closure
 ```

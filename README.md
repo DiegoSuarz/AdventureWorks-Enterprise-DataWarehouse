@@ -260,14 +260,14 @@ Current dimensional state:
 | M3 — Data Warehouse Foundation | ✅ Completed |
 | M4 — Dimensional Model Expansion | ✅ Completed |
 | M5 — Composite + High Watermark Incremental Loading | ✅ Completed |
-| M6 — FactSales & Star Schema Completion | 🟡 Validated; closure in progress |
+| M6 — FactSales & Star Schema Completion | ✅ Completed |
 | M7 — Power BI Analytics | ⬜ Planned |
 | M8 — Production Hardening & Project Closure | ⬜ Planned |
 
-The latest stable release is **v1.3.0 — Composite + High Watermark Incremental Loading**.
-M6 implementation and validation are complete. Documentation review, PR integration, and release publication remain in progress.
-The release candidate is **v1.4.0 — FactSales & Star Schema Completion**.
-See [release preparation](docs/releases/v1.4.0.md).
+The latest stable release is **v1.4.0 — FactSales & Star Schema Completion**.
+M6 is complete and integrated through PR #14.
+The next planned module is **M7 — Power BI Analytics**.
+See [v1.4.0 release notes](docs/releases/v1.4.0.md).
 
 ---
 
