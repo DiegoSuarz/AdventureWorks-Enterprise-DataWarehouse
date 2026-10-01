@@ -161,3 +161,29 @@ Desktop refresh evidence does not demonstrate scheduled refresh in the Service.
 - [Semantic model and relationships](semantic-model.md)
 - [DAX measure catalog](dax-measures.md)
 - [Controlled refresh test](../database/06_validation/manual_powerbi_753/README.md)
+
+## 12. Report Screenshots
+
+Final report and model screenshots. The validation screenshot
+records the restored baseline; it does not replace the separate
+before/after evidence of the controlled insertion test.
+
+### Sales Overview
+
+![Sales Overview](screenshots/sales-overview.png)
+
+### Product Analysis
+
+![Product Analysis](screenshots/product-analysis.png)
+
+### Customer & Territory Analysis
+
+![Customer & Territory Analysis](screenshots/customer-territory-analysis.png)
+
+### Validation Baseline
+
+![Validation Baseline](screenshots/validation-baseline.png)
+
+### Semantic Model
+
+![Semantic Model](screenshots/semantic-model.png)
