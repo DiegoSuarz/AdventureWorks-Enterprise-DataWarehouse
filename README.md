@@ -10,7 +10,7 @@
 ![T-SQL](https://img.shields.io/badge/T--SQL-025E8C?style=for-the-badge)
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 ![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github)
-![Power BI](https://img.shields.io/badge/Power_BI-Planned-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)
+![Power BI](https://img.shields.io/badge/Power_BI-Implemented-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
 </div>
@@ -183,7 +183,7 @@ Historical dimensional versions remain exclusively in the `dw` layer.
 | IDE | Visual Studio Code |
 | Version Control | Git |
 | Repository | GitHub |
-| Business Intelligence | Power BI *(planned)* |
+| Business Intelligence | Power BI |
 
 ---
 
@@ -261,12 +261,15 @@ Current dimensional state:
 | M4 — Dimensional Model Expansion | ✅ Completed |
 | M5 — Composite + High Watermark Incremental Loading | ✅ Completed |
 | M6 — FactSales & Star Schema Completion | ✅ Completed |
-| M7 — Power BI Analytics | ⬜ Planned |
+| M7 — Power BI Analytics | 🟡 Validated; closure in progress |
 | M8 — Production Hardening & Project Closure | ⬜ Planned |
 
 The latest stable release is **v1.4.0 — FactSales & Star Schema Completion**.
 M6 is complete and integrated through PR #14.
-The next planned module is **M7 — Power BI Analytics**.
+M7 implementation, Desktop validation and Power BI Service publication are complete; formal closure is in progress.
+Gateway deployment and scheduled refresh are deferred to a future update.
+The next planned module is **M8 — Production Hardening & Project Closure**.
+See the [Power BI report guide](powerbi/README.md).
 See [v1.4.0 release notes](docs/releases/v1.4.0.md).
 
 ---
