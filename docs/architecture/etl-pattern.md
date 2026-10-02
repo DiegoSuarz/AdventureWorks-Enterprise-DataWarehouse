@@ -625,6 +625,7 @@ Architecture: Approved
 Current Pattern: Full Load + Composite/High Watermark Incremental Loading
 Current Stable Release: v1.4.0
 Latest Completed Module: Module 6 — FactSales & Star Schema Completion
-Next Module: Module 7 — Power BI Analytics
+Current Module: Module 7 — Power BI Analytics (validated; closure in progress)
+Next Module: Module 8 — Production Hardening & Project Closure
 Final Module: Module 8 — Production Hardening & Project Closure
 ```
