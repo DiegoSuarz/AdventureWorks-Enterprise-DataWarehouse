@@ -172,12 +172,12 @@ M7 — Power BI Analytics
 
 `dw.FactSales` is implemented and validated, completing the analytical
 star schema. Module 6 is complete and integrated through PR #14.
-Module 7 implementation and validation are complete, including publication to Power BI Service. Formal closure is in progress.
+Module 7 is complete and integrated through PR #16, including validation and publication to Power BI Service.
 Gateway deployment and scheduled refresh are deferred to a future update.
 
 See the [Power BI report guide](../powerbi/README.md), [semantic model](../powerbi/semantic-model.md), and [DAX catalog](../powerbi/dax-measures.md).
 
-See [v1.4.0 release notes](releases/v1.4.0.md).
+See [v1.5.0 release notes](releases/v1.5.0.md).
 
 ---
 
@@ -214,9 +214,9 @@ Architecture Documentation : Active
 Dimension Specifications   : 6 implemented
 Source Documentation        : Active
 Reference Catalog           : Active
-Current Stable Release      : v1.4.0
-Latest Completed Module     : Module 6 — FactSales & Star Schema Completion
-Current Module              : Module 7 — Power BI Analytics (validated; closure in progress)
+Current Stable Release      : v1.5.0
+Latest Completed Module     : Module 7 — Power BI Analytics
+Module 7 Status             : Completed
 Next Module                 : Module 8 — Production Hardening & Project Closure
 Final Module                : Module 8 — Production Hardening & Project Closure
 ```

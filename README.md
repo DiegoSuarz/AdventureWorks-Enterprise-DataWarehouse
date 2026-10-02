@@ -261,16 +261,16 @@ Current dimensional state:
 | M4 — Dimensional Model Expansion | ✅ Completed |
 | M5 — Composite + High Watermark Incremental Loading | ✅ Completed |
 | M6 — FactSales & Star Schema Completion | ✅ Completed |
-| M7 — Power BI Analytics | 🟡 Validated; closure in progress |
+| M7 — Power BI Analytics | ✅ Completed |
 | M8 — Production Hardening & Project Closure | ⬜ Planned |
 
-The latest stable release is **v1.4.0 — FactSales & Star Schema Completion**.
+The latest stable release is **v1.5.0 — Power BI Analytics**.
 M6 is complete and integrated through PR #14.
-M7 implementation, Desktop validation and Power BI Service publication are complete; formal closure is in progress.
+M7 is complete and integrated through PR #16, including Desktop validation and Power BI Service publication.
 Gateway deployment and scheduled refresh are deferred to a future update.
 The next planned module is **M8 — Production Hardening & Project Closure**.
 See the [Power BI report guide](powerbi/README.md).
-See [v1.4.0 release notes](docs/releases/v1.4.0.md).
+See [v1.5.0 release notes](docs/releases/v1.5.0.md).
 
 ---
 
