@@ -60,8 +60,9 @@ FactSales. Do not filter dimension imports to current rows only.
 | Customer & Territory Analysis | Customer types and territory detail |
 | Validation | Technical reconciliation of measures and date roles |
 
-Validation is retained for maintenance. Its intended presentation state
-is hidden from normal navigation. Hiding a page is not a security control.
+Validation is retained for maintenance and hidden from normal navigation.
+Its absence from Power BI Service reading-mode navigation was verified
+after republishing. Hiding a page is not a security control.
 
 Order Month uses the active OrderDate relationship. Ship Date and Due Date
 measures explicitly use their corresponding inactive relationships.
@@ -149,12 +150,29 @@ After changing the report:
 Avoid independently editing both copies. The PBIX is binary; accompanying
 documentation records technical decisions in reviewable text.
 
-## 10. Pending Work
+## 10. Power BI Service and Deferred Automation
 
-Power BI Service publication, gateway configuration and automatic refresh
-remain pending before formal Module 7 closure.
+The report was published successfully to My workspace.
+All three analytical pages loaded successfully in Power BI Service.
+The March 2014 / Canada filter scenario matched the expected displayed values.
 
-Desktop refresh evidence does not demonstrate scheduled refresh in the Service.
+Gateway installation and scheduled refresh were deferred to a future
+project update. They are outside the agreed Module 7 closure scope
+and have not been validated.
+
+Until that enhancement is implemented, the update workflow is:
+1. Execute the warehouse ETL and verify its result.
+2. Refresh the Windows working copy in Power BI Desktop.
+3. Save and republish to the same Power BI Service workspace.
+4. Synchronize the repository PBIX when recording a new report version.
+
+The published report uses its imported data. Publication and report
+interaction do not demonstrate direct connectivity to local SQL Server
+or automatic refresh.
+
+Future work: install and register the gateway, configure the SQL Server
+connection, associate the semantic model, and validate on-demand and
+scheduled refresh from Power BI Service.
 
 ## 11. Technical Documentation
 
